@@ -1,0 +1,4 @@
+*.o
+bank
+server
+client
