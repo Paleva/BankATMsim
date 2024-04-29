@@ -2,3 +2,5 @@
 bank
 server
 client
+./db/accounts.txt
+a.out

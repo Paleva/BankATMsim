@@ -1,0 +1,3 @@
+Voitke:1234:0
+Voitkevicius:123456:200
+Arnas:123456789:500
