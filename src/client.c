@@ -55,11 +55,6 @@ int send_get_request(int sock, char *request){
     return 0;
 }
 
-int send_post_request(int sock){
-    char *request_temp = "POST /";
-    return 0;
-}
-
 int send_put_request(int sock, char *request){
     send(sock, request, strlen(request), 0);    
     return 0;
@@ -69,20 +64,22 @@ int send_put_request(int sock, char *request){
 void login_into_acc(int sock){
     char *request_temp = "GET /login:";
     char nickname[20];
-    
+    char password[20];
+
     printf("Enter the nickname of the account you want to access: ");
     fgets(nickname, 20, stdin);
     
-    char *request = (char *)malloc(strlen(request_temp) + strlen(nickname) + 1);
+    char request[1024] = {0};
     strcpy(request, request_temp);
     strcat(request, nickname);
     request[strlen(request)-1] = '\0';
-    
-    printf("You entered: %s\n", nickname);
-    
+    printf("Loging into account: %s\n", nickname);
+    printf("Enter password: ");
+    fgets(password, 20, stdin);
+    printf("You entered: %s\n", request);
+    strcat(request, ":");
+    strcat(request, password);
     send_get_request(sock, request);
-    
-    free(request);
 }
 
 void create_acc(int sock){
