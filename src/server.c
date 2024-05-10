@@ -18,41 +18,32 @@ typedef sem_t semaphore;
 #define SEMKEYBANK "/semaphorebank"
 #define SEMKEYSERVER "/semaphoreserver"
 
-int data_ready = 0;
-
-struct server_to_bank{
-    int bank_pid;
-    char *shared_mem;
-    char *buffer;
-    semaphore *sem_bank;
-    semaphore *sem_server;
-};
+volatile server_pid = 0;
 
 semaphore *semaphore_open(char* name);
 
-// char* shared, char *str, semaphore *sem_bank, semaphore *sem_server
-void send_to_bank(struct server_to_bank *server_bank);
-void read_from_server(struct server_to_bank *server_bank);
 void fetch_balance(); // fetch balance from bank using pipe probs
 
-void handle_request(int socket, struct server_to_bank *server_bank);
+void handle_request(int socket);
 
 int shared_mem_id(int key);
 char *shared_mem_ptr(int key);
 
-void handle_login(int socket, char buffer[], struct server_to_bank *server_bank);
-void handle_create_acc(int socket, char buffer[], struct server_to_bank *server_bank);
+void handle_login(int socket, char buffer[]);
+void handle_create_acc(int socket, char buffer[]);
 
-void handle_get_request(int socket, char buffer[], struct server_to_bank *server_bank);
-void handle_put_request(int socket, char buffer[], struct server_to_bank *server_bank);
+void handle_get_request(int socket, char buffer[]);
+void handle_post_request(int socket);
+void handle_put_request(int socket, char buffer[]);
 
 void send_get_request(int sock, char *request);
 
+
 void sigchld_handler(int signo);
-void sigsusr1_handler(int signo);
 
 void sigsusr1_send(int pid);
 
+void sigsusr1_receive(int sig, siginfo_t *info, void *ucontext, int *server_ready);
 
 int main(){
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -78,6 +69,7 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+
     int new_connection_socket;
     int addrlen = sizeof(serv_addr);
     
@@ -86,26 +78,23 @@ int main(){
     bzero(&sa, sizeof(sa));
     sa.sa_handler = &sigchld_handler;
     sa.sa_flags = SA_RESTART;
+    sigaction(SIGCHLD, &sa, NULL);
+
     if(sigaction(SIGCHLD, &sa, NULL) == -1){
         perror("sigaction");
         exit(EXIT_FAILURE);
     }
-
+    
     struct sigaction sa_usr1;
     bzero(&sa_usr1, sizeof(sa_usr1));
-    sa_usr1.sa_handler = &sigsusr1_handler;
-    sa_usr1.sa_flags = SA_RESTART;
-    if(sigaction(SIGUSR1, &sa_usr1, NULL) == -1){
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
-    
-    struct server_to_bank *server_bank = malloc(sizeof(struct server_to_bank));
+    sa_usr1.sa_sigaction = &sigsusr1_receive;
+    sa_usr1.sa_flags = SA_RESTART | SA_SIGINFO;
+    sigaction(SIGUSR1, &sa_usr1, NULL);
+
     int shmid = shared_mem_id(SHMKEY);
-    server_bank->shared_mem = shared_mem_ptr(shmid);
-    server_bank->sem_bank = semaphore_open(SEMKEYBANK);
-    server_bank->sem_server = semaphore_open(SEMKEYSERVER);
-    server_bank->bank_pid = getppid();
+    char *shmptr = shared_mem_ptr(shmid);
+    semaphore *sem_bank = semaphore_open(SEMKEYBANK);
+    semaphore *sem_server = semaphore_open(SEMKEYSERVER);
 
     printf("Server listening on port %d\n", PORT);
     while(1){
@@ -123,12 +112,13 @@ int main(){
             if(pid == 0){
                 close(sockfd); // close original socket because accept creates a new one
                 printf("IM KID\n PID: %d \n", getpid());
-                handle_request(new_connection_socket, server_bank);
+                handle_request(new_connection_socket);
                 close(new_connection_socket);
                 exit(0);
             }
             else{
                 close(new_connection_socket); // close new socket because parent process does not need it
+                // waitpid(pid, NULL, 0);
                 printf("IM PARENT\n PID: %d \n", getpid());
             }
         }
@@ -138,13 +128,14 @@ int main(){
         }
 
     }
-    free(server_bank);
+
     return 0;
 }
 
-void handle_request(int socket, struct server_to_bank *server_bank){
+void handle_request(int socket){
     
     char buffer[1024] = {0};
+    bzero(buffer, 1024);
     read(socket, buffer, 1024);
 
     char method[10] = {0};
@@ -155,10 +146,13 @@ void handle_request(int socket, struct server_to_bank *server_bank){
     printf("Path: %s\n", path);
 
     if(strstr(method, "GET") != NULL){
-        handle_get_request(socket, buffer, server_bank);
+        handle_get_request(socket, buffer);
+    }
+    else if(strstr(method, "POST") != NULL){
+        // handle_post_request(socket);
     }
     else if(strstr(method, "PUT") != NULL){
-        handle_put_request(socket, buffer, server_bank);
+        handle_put_request(socket, buffer);
     }
     else{
         printf("Invalid request\n");
@@ -166,12 +160,12 @@ void handle_request(int socket, struct server_to_bank *server_bank){
 }
 
 
-void handle_get_request(int socket, char buffer[], struct server_to_bank *server_bank){
+void handle_get_request(int socket, char buffer[]){
     char *login = "login";
     char *balance = "balance";
 
     if(strstr(buffer, login) != NULL){
-        handle_login(socket, buffer, server_bank);
+        handle_login(socket, buffer);
     }
     else if(strstr(buffer, balance) != NULL){
         //send balance
@@ -181,11 +175,11 @@ void handle_get_request(int socket, char buffer[], struct server_to_bank *server
     }
 }
 
-void handle_put_request(int socket, char buffer[], struct server_to_bank *server_bank){
+void handle_put_request(int socket, char buffer[]){
     char *create = "create";
     char *deposit = "deposit";
     if(strstr(buffer, create) != NULL){
-        handle_create_acc(socket, buffer, server_bank);
+        handle_create_acc(socket, buffer);
     }
     else if (strstr(buffer, deposit) != NULL){
         //deposit money contact bank
@@ -200,28 +194,35 @@ void send_get_request(int sock, char *request){
 }
 
 
-void handle_login(int socket, char buffer[], struct server_to_bank *server_bank){
+void handle_login(int socket, char buffer[]){
+    char *pass[100] = {0};
+    char *nickname = strtok(buffer, ":");
+    nickname = strtok(NULL, ":");
     
-    server_bank->buffer = malloc(1024);
-    strcpy(server_bank->buffer, buffer);
-    send_to_bank(server_bank);
-    while(data_ready == 0);
-    read_from_server(server_bank);
-    printf("Data read in memory: %s\n", server_bank->buffer);
-    // char *nickname = strtok(buffer, ":");
-    // nickname = strtok(NULL, ":");
-    // char *password = strtok(NULL, ":");
-    // printf("Loging into account: %s\n", nickname);
+    int return_code = 0;
+
+    if (return_code == 0){
+        write(socket, "Enter your password:", 21);
+    }
+    else if (return_code == 1)
+    {
+        write(socket, "Account does not exist", 22);
+    }
+    
+    printf("Loging into account: %s\n", nickname);
+
+
+    printf("Enter password: ");
+    fgets(pass, 100, stdin);
     char *response = "Logged in successfully";
     send_get_request(socket, response);
 }
 
-void handle_create_acc(int socket, char buffer[], struct server_to_bank *server_bank){
+void handle_create_acc(int socket, char buffer[]){
     char *nickname = strtok(buffer, ":");
     nickname = strtok(NULL, ":");
     printf("Creating account with nickname: %s\n", nickname);
-    int bank_pid = getppid();
-    sigsusr1_send(bank_pid);
+    //request password
 
     //create account with bank thru pipes or shared memory
     //send response
@@ -229,37 +230,19 @@ void handle_create_acc(int socket, char buffer[], struct server_to_bank *server_
     send_get_request(socket, response);
 }
 
-void send_to_bank(struct server_to_bank *server_bank){
-    printf("BANK PID: %d\n", server_bank->bank_pid);
-    sem_wait(server_bank->sem_server);
-    sigsusr1_send(server_bank->bank_pid);
-    printf("SERVER: Data written in memory: %s \n", server_bank->buffer);
-    strcpy(server_bank->shared_mem, server_bank->buffer);
-    // bzero(server_bank->buffer, 1024);
-    sem_post(server_bank->sem_bank);
-}
 
-void read_from_server(struct server_to_bank *server_bank){
-    sem_wait(server_bank->sem_server);
-    printf("SERVER: Data read from memory: %s\n", server_bank->shared_mem);
-    strcpy(server_bank->buffer, server_bank->shared_mem);
-    // bzero(server_bank->shared_mem, 1024);
-    sem_post(server_bank->sem_bank);
-}
-
-
-void sigsusr1_handler(int signo){
-    printf("GOTTEN:SER\n");
-    data_ready = 1;
-}
 
 void sigsusr1_send(int pid){
-    printf("SENT:SER\n");
     kill(pid, SIGUSR1);
 }
 
 void sigchld_handler(int signo){
     while(waitpid(-1, NULL, WNOHANG) > 0); // figure how this works
+}
+
+void sigsusr1_receive(int sig, siginfo_t *info, void *ucontext, int *server_ready){
+    server_pid = info->si_pid;
+    *server_ready = 1;
 }
 
 semaphore *semaphore_open(char *name){
