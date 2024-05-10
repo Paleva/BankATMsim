@@ -18,9 +18,21 @@ typedef sem_t semaphore;
 #define SEMKEYBANK "/semaphorebank"
 #define SEMKEYSERVER "/semaphoreserver"
 
-volatile server_pid = 0;
+volatile int data_ready = 0;
+
+
+struct server_bank{
+    int bank_pid;
+    char *shared_mem;
+    char buffer[1024];
+    semaphore *sem_bank;
+    semaphore *sem_server;
+};
 
 semaphore *semaphore_open(char* name);
+
+void read_from_bank(struct server_bank *server_bank);
+void send_to_bank(struct server_bank *server_bank);
 
 void fetch_balance(); // fetch balance from bank using pipe probs
 
@@ -79,7 +91,6 @@ int main(){
     sa.sa_handler = &sigchld_handler;
     sa.sa_flags = SA_RESTART;
     sigaction(SIGCHLD, &sa, NULL);
-
     if(sigaction(SIGCHLD, &sa, NULL) == -1){
         perror("sigaction");
         exit(EXIT_FAILURE);
@@ -90,11 +101,17 @@ int main(){
     sa_usr1.sa_sigaction = &sigsusr1_receive;
     sa_usr1.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGUSR1, &sa_usr1, NULL);
+    if(sigaction(SIGUSR1, &sa_usr1, NULL) == -1){
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
 
+    struct server_bank *server_bank = malloc(sizeof(struct server_bank));
     int shmid = shared_mem_id(SHMKEY);
-    char *shmptr = shared_mem_ptr(shmid);
-    semaphore *sem_bank = semaphore_open(SEMKEYBANK);
-    semaphore *sem_server = semaphore_open(SEMKEYSERVER);
+    server_bank->shared_mem = shared_mem_ptr(shmid);
+    server_bank->sem_bank = semaphore_open(SEMKEYBANK);
+    server_bank->sem_server = semaphore_open(SEMKEYSERVER);
+    server_bank->bank_pid = getppid();
 
     printf("Server listening on port %d\n", PORT);
     while(1){
@@ -147,9 +164,6 @@ void handle_request(int socket){
 
     if(strstr(method, "GET") != NULL){
         handle_get_request(socket, buffer);
-    }
-    else if(strstr(method, "POST") != NULL){
-        // handle_post_request(socket);
     }
     else if(strstr(method, "PUT") != NULL){
         handle_put_request(socket, buffer);
@@ -230,6 +244,29 @@ void handle_create_acc(int socket, char buffer[]){
     send_get_request(socket, response);
 }
 
+void send_to_bank(struct server_bank *server_bank){
+    printf("BANK PID: %d\n", server_bank->bank_pid);
+    sem_wait(server_bank->sem_server);
+    sigsusr1_send(server_bank->bank_pid);
+    printf("SERVER: Data written in memory: %s \n", server_bank->buffer);
+    strcpy(server_bank->shared_mem, server_bank->buffer);
+    // bzero(server_bank->buffer, 1024);
+    sem_post(server_bank->sem_bank);
+}
+
+void read_from_bank(struct server_bank *server_bank){
+    sem_wait(server_bank->sem_server);
+    printf("SERVER: Data read from memory: %s\n", server_bank->shared_mem);
+    strcpy(server_bank->buffer, server_bank->shared_mem);
+    // bzero(server_bank->shared_mem, 1024);
+    sem_post(server_bank->sem_bank);
+}
+
+
+void sigsusr1_handler(int signo){
+    printf("GOTTEN:SER\n");
+    data_ready = 1;
+}
 
 
 void sigsusr1_send(int pid){
@@ -240,10 +277,6 @@ void sigchld_handler(int signo){
     while(waitpid(-1, NULL, WNOHANG) > 0); // figure how this works
 }
 
-void sigsusr1_receive(int sig, siginfo_t *info, void *ucontext, int *server_ready){
-    server_pid = info->si_pid;
-    *server_ready = 1;
-}
 
 semaphore *semaphore_open(char *name){
     semaphore *sem = sem_open(name, 0);

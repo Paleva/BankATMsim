@@ -17,28 +17,8 @@ typedef sem_t semaphore;
 #define SEMKEYSERVER "/semaphoreserver"
 #define ACCOUNTS "db/accounts.txt"
 
-// IMPLEMENT SIGNALS BETWEEN SERVER AND BANK
-// FOR NOTIFYING IF THE SERVER IS REQUESTING INFORMATION
-
-// return 1 to server on failure and 0 on success in creation of account
-int create_acc();
-
-// return 1 to server on failure and 0 on success in login
-int check_if_acc_exists();
-
-void send_password();
-void verify_password();
-void deposit_money();
-
-semaphore *semaphore_open(char* name, int init_val);
-struct account *read_accounts(char *filename, int *account_number);
-int shared_mem_id(int key);
-char *shared_mem_ptr(int key);
-
-void sigusr1_handler(int signum);
-void sigusr1_send(int pid);
-
-void do_with_semaphores(char* shared, char *str, sem_t *semaphore, sem_t *sem_server);
+volatile int data_ready = 0;
+volatile int exit_flag = 0;
 
 struct account {
     char nickname[20];
@@ -46,20 +26,65 @@ struct account {
     int balance;
 };
 
+struct bank_server{
+    semaphore *sem_bank;
+    semaphore *sem_server;
+    char *shared_mem;
+    int server_pid;
+    char buffer[1024];
+};
+
+
+int create_acc();
+
+int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount);
+
+void send_password();
+void verify_password();
+void deposit_money();
+
+semaphore *semaphore_open(char* name, int init_val);
+struct account *read_accounts(char *filename, int *account_number);
+
+int shared_mem_id(int key);
+char *shared_mem_ptr(int key);
+
+void sigusr1_handler(int signum);
+void sigusr1_send(int pid);
+
+void send_to_server(struct bank_server *bank_server);
+
+
 int main(){
-    int shmid = shared_mem_id(SHMKEY);
-    char *shmptr = shared_mem_ptr(shmid);
     int account_amount = 0;
     struct account *accounts = read_accounts(ACCOUNTS, &account_amount);
+    struct bank_server *bank_server = malloc(sizeof(struct bank_server));
+
     sem_unlink(SEMKEYBANK);
     sem_unlink(SEMKEYSERVER);
-    semaphore *sem_bank = semaphore_open(SEMKEYBANK, 1);
-    semaphore *sem_server = semaphore_open(SEMKEYSERVER, 0);
+    int shmid = shared_mem_id(SHMKEY);
+    bank_server->shared_mem = shared_mem_ptr(shmid);
+    bank_server->sem_bank = semaphore_open(SEMKEYBANK, 0);
+    bank_server->sem_server = semaphore_open(SEMKEYSERVER, 1);
+
 
     struct sigaction sa;
+    bzero(&sa, sizeof(sa));
     sa.sa_handler = &sigusr1_handler;
-    sigaction(SIGUSR1, &sa, NULL);
+    sa.sa_flags = SA_RESTART;
+    if(sigaction(SIGUSR1, &sa, NULL) == -1){
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
 
+    struct sigaction sa_chld;
+    bzero(&sa, sizeof(sa_chld));
+    sa_chld.sa_handler = &sigchld_handler;
+    sa_chld.sa_flags = SA_RESTART;
+    if(sigaction(SIGCHLD, &sa_chld, NULL) == -1){
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
 
 
     pid_t server_proc = fork();
@@ -71,18 +96,40 @@ int main(){
         execl("./server", NULL);
         printf("Server pid: %d\n", server_proc);
     }
-    printf("Server pid: %d\n", server_proc);
+    else {
+        while (1) {
+            if (data_ready == 0) {
+                continue;
+            } 
+            else {
+                printf("Data ready!!!!1\n");
+                read_from_server(bank_server);
+                int index = check_if_acc_exists(accounts, bank_server->buffer, account_amount);
+                if (index > 0) {
+                    // bank_server->buffer = malloc(sizeof(accounts[index].password));
+                    strcpy(bank_server->buffer, accounts[index].password);
+                    send_to_server(bank_server);
+                    free(bank_server->buffer);
+                    data_ready = 0;
+                } else {
+                    strcpy(bank_server->buffer, "NOACC");
+                    send_to_server(bank_server);
+                    free(bank_server->buffer);
+                    data_ready = 0;
+                }
+            }
+            if(exit_flag == 1){
+                sem_close(bank_server->sem_bank);
+                sem_close(bank_server->sem_server);
+                sem_destroy(bank_server->sem_bank);
+                sem_destroy(bank_server->sem_server);
+                shmctl(shmid, IPC_RMID, NULL);
+                shmdt(bank_server->shared_mem);
+                free(accounts);
+            }
+        }
+    }
 
-    sleep(1);
-    sigusr1_send(server_proc);
-    do_with_semaphores(shmptr, "Hello from bank", sem_bank, sem_server);
-    sem_close(sem_bank);
-    sem_close(sem_server);
-    sem_destroy(sem_bank);
-    sem_destroy(sem_server);
-    shmctl(shmid, IPC_RMID, NULL);
-    shmdt(shmptr);
-    free(accounts);
     return 0;
 }
 
@@ -102,6 +149,19 @@ semaphore *semaphore_open(char *name, int init_val){
         exit(EXIT_FAILURE);
     }
     return sem;
+}
+
+int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount){
+    int i;
+    printf("BANK IS CHECKING \n");
+    for (i = 0; i < accounts_amount; i++){
+        printf("BANK: %s\n", accounts[i].nickname);
+        if(strcmp(accounts[i].nickname, nickname) == 0){
+            printf("ACC FOUND");
+            return i;
+        }
+    }
+    return -1;
 }
 
 struct account *read_accounts(char *filename, int *account_number){
@@ -158,4 +218,8 @@ void sigusr1_handler(int signum){
 
 void sigusr1_send(int pid){
     kill(pid, SIGUSR1);
+}
+
+void sigchld_handler(int signo){
+    while(waitpid(-1, NULL, WNOHANG) > 0); // figure how this works
 }
