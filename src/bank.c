@@ -1,5 +1,6 @@
 #include <sys/shm.h>
 #include <sys/types.h>
+#include <sys/wait.h>   
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,8 +18,6 @@ typedef sem_t semaphore;
 #define SEMKEYSERVER "/semaphoreserver"
 #define ACCOUNTS "db/accounts.txt"
 
-volatile int data_ready = 0;
-volatile int exit_flag = 0;
 
 struct account {
     char nickname[20];
@@ -59,12 +58,15 @@ void sigusr1_send(int pid);
 void send_to_server(struct bank_server *bank_server);
 void read_from_server(struct bank_server *bank_server);
 
-struct bank_server *bank_server;
+
+volatile sig_atomic_t data_ready = 0;
+volatile sig_atomic_t exit_flag = 0;
+volatile sig_atomic_t server_pid = 0;
 
 int main(){
     int account_amount = 0;
     struct account *accounts = read_accounts(ACCOUNTS, &account_amount);
-    bank_server = malloc(sizeof(struct bank_server));
+    struct bank_server *bank_server = malloc(sizeof(struct bank_server));
 
     sem_unlink(SEMKEYBANK);
     sem_unlink(SEMKEYSERVER);
@@ -93,8 +95,8 @@ int main(){
     }
 
     struct sigaction sa_sigint;
-    bzero(&sa, sizeof(sa_sigint));
-    sa_sigint.sa_handler = &sigint_handler;    
+    bzero(&sa_sigint, sizeof(sa_sigint));
+    sa_sigint.sa_handler = &sigint_handler;
     if(sigaction(SIGINT, &sa_sigint, NULL) == -1){
         perror("sigaction");
         exit(EXIT_FAILURE);
@@ -129,7 +131,8 @@ int main(){
                     data_ready = 0;
                 }
             }
-            if(exit_flag == 1){
+            if(exit_flag > 0){
+                printf("Exiting\n");
                 sem_close(bank_server->sem_bank);
                 sem_close(bank_server->sem_server);
                 sem_destroy(bank_server->sem_bank);
@@ -149,14 +152,16 @@ int main(){
 void send_to_server(struct bank_server *bank_server){
     sem_wait(bank_server->sem_bank);
     strcpy(bank_server->shared_mem, bank_server->buffer);
+    printf("SENDING TO SERVER: %s\n", bank_server->shared_mem);
     sem_post(bank_server->sem_server);
-    sem_post(bank_server->sem_server);
+    // sem_post(bank_server->sem_server);
     sigusr1_send(bank_server->server_pid);
 }
 
 void read_from_server(struct bank_server *bank_server){
     sem_wait(bank_server->sem_bank);
     strcpy(bank_server->buffer, bank_server->shared_mem);
+    printf("READING FROM SERVER: %s\n", bank_server->buffer);
     sem_post(bank_server->sem_server);
 }
 
@@ -235,15 +240,11 @@ void sigusr1_send(int pid){
 
 void sigusr1_handler(int signum, siginfo_t *info, void *ucontext){
     data_ready = 1;
-    bank_server->server_pid = info->si_pid;
+    server_pid = info->si_pid;
 }
-
-
+void sigint_handler(int signum){
+    exit_flag = signum;
+}
 void sigchld_handler(int signum){
     while(waitpid(-1, NULL, WNOHANG) > 0); // figure how this works
-}
-
-void sigint_handler(int signum){
-    exit_flag = 1;
-    printf("Exiting\n");
 }

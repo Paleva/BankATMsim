@@ -131,8 +131,6 @@ int main(){
                 exit(0);
             }
             else{
-                close(new_connection_socket); // close new socket because parent process does not need it
-                // waitpid(pid, NULL, 0);
                 printf("IM PARENT\n PID: %d \n", getpid());
             }
         }
@@ -223,7 +221,7 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
         else{
             read_from_bank(server_bank);
             data_ready = 0;
-            printf("Password: %s\n", server_bank->buffer);
+            printf("SERVER: Password: %s\n", server_bank->buffer);
             break;
         }
     }
@@ -254,14 +252,12 @@ void handle_create_acc(int socket, char buffer[], struct server_bank *server_ban
         }
         else{
             read_from_bank(server_bank);
-            data_ready = 0;
+            printf("Creating account with nickname: %s\n", nickname);
             printf("Password: %s\n", server_bank->buffer);
+            data_ready = 0;
             break;
         }
     }
-
-    printf("Creating account with nickname: %s\n", nickname);
-    printf("Password: %s\n", password);
 
     char *response = "200 OK";
     send_response(socket, response);
@@ -270,6 +266,7 @@ void handle_create_acc(int socket, char buffer[], struct server_bank *server_ban
 void send_to_bank(struct server_bank *server_bank){
     sem_wait(server_bank->sem_server);
     strcpy(server_bank->shared_mem, server_bank->buffer);
+    printf("SENDING TO BANK: %s\n", server_bank->shared_mem);
     sem_post(server_bank->sem_bank);
     sem_post(server_bank->sem_bank);
     sigsusr1_send(server_bank->bank_pid);
@@ -278,6 +275,7 @@ void send_to_bank(struct server_bank *server_bank){
 void read_from_bank(struct server_bank *server_bank){
     sem_wait(server_bank->sem_server);
     strcpy(server_bank->buffer, server_bank->shared_mem);
+    printf("READING FROM BANK: %s\n", server_bank->buffer);
     sem_post(server_bank->sem_bank);
 }
 

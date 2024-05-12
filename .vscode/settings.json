@@ -5,6 +5,7 @@
         "unistd.h": "c",
         "signal-defs.h": "c",
         "signal.h": "c",
-        "sigaction.h": "c"
+        "sigaction.h": "c",
+        "wait.h": "c"
     }
 }
