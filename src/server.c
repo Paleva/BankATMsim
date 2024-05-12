@@ -36,26 +36,23 @@ void send_to_bank(struct server_bank *server_bank);
 
 void fetch_balance(); // fetch balance from bank using pipe probs
 
-void handle_request(int socket);
+void handle_request(int socket, struct server_bank *server_bank);
 
 int shared_mem_id(int key);
 char *shared_mem_ptr(int key);
 
-void handle_login(int socket, char buffer[]);
-void handle_create_acc(int socket, char buffer[]);
+void handle_login(int socket, char buffer[], struct server_bank *server_bank);
+void handle_create_acc(int socket, char buffer[], struct server_bank *server_bank);
 
-void handle_get_request(int socket, char buffer[]);
-void handle_post_request(int socket);
-void handle_put_request(int socket, char buffer[]);
+void handle_get_request(int socket, char buffer[], struct server_bank *server_bank);
+void handle_put_request(int socket, char buffer[], struct server_bank *server_bank);
 
-void send_get_request(int sock, char *request);
-
-
-void sigchld_handler(int signo);
+void send_response(int sock, char *request);
 
 void sigsusr1_send(int pid);
 
-void sigsusr1_receive(int sig, siginfo_t *info, void *ucontext, int *server_ready);
+void sigchld_handler(int signum);
+void sigusr1_handler(int signum);
 
 int main(){
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -98,7 +95,7 @@ int main(){
     
     struct sigaction sa_usr1;
     bzero(&sa_usr1, sizeof(sa_usr1));
-    sa_usr1.sa_sigaction = &sigsusr1_receive;
+    sa_usr1.sa_handler = &sigusr1_handler;
     sa_usr1.sa_flags = SA_RESTART | SA_SIGINFO;
     sigaction(SIGUSR1, &sa_usr1, NULL);
     if(sigaction(SIGUSR1, &sa_usr1, NULL) == -1){
@@ -129,7 +126,7 @@ int main(){
             if(pid == 0){
                 close(sockfd); // close original socket because accept creates a new one
                 printf("IM KID\n PID: %d \n", getpid());
-                handle_request(new_connection_socket);
+                handle_request(new_connection_socket, server_bank);
                 close(new_connection_socket);
                 exit(0);
             }
@@ -149,10 +146,9 @@ int main(){
     return 0;
 }
 
-void handle_request(int socket){
+void handle_request(int socket, struct server_bank *server_bank){
     
     char buffer[1024] = {0};
-    bzero(buffer, 1024);
     read(socket, buffer, 1024);
 
     char method[10] = {0};
@@ -163,10 +159,10 @@ void handle_request(int socket){
     printf("Path: %s\n", path);
 
     if(strstr(method, "GET") != NULL){
-        handle_get_request(socket, buffer);
+        handle_get_request(socket, path, server_bank);
     }
     else if(strstr(method, "PUT") != NULL){
-        handle_put_request(socket, buffer);
+        handle_put_request(socket, path, server_bank);
     }
     else{
         printf("Invalid request\n");
@@ -174,12 +170,12 @@ void handle_request(int socket){
 }
 
 
-void handle_get_request(int socket, char buffer[]){
+void handle_get_request(int socket, char buffer[], struct server_bank *server_bank){
     char *login = "login";
     char *balance = "balance";
 
     if(strstr(buffer, login) != NULL){
-        handle_login(socket, buffer);
+        handle_login(socket, buffer, server_bank);
     }
     else if(strstr(buffer, balance) != NULL){
         //send balance
@@ -189,11 +185,11 @@ void handle_get_request(int socket, char buffer[]){
     }
 }
 
-void handle_put_request(int socket, char buffer[]){
+void handle_put_request(int socket, char buffer[], struct server_bank *server_bank){
     char *create = "create";
     char *deposit = "deposit";
     if(strstr(buffer, create) != NULL){
-        handle_create_acc(socket, buffer);
+        handle_create_acc(socket, buffer, server_bank);
     }
     else if (strstr(buffer, deposit) != NULL){
         //deposit money contact bank
@@ -203,68 +199,90 @@ void handle_put_request(int socket, char buffer[]){
     }
 }
 
-void send_get_request(int sock, char *request){
+void send_response(int sock, char *request){
     send(sock, request, strlen(request), 0);
 }
 
 
-void handle_login(int socket, char buffer[]){
-    char *pass[100] = {0};
-    char *nickname = strtok(buffer, ":");
-    nickname = strtok(NULL, ":");
-    
-    int return_code = 0;
+void handle_login(int socket, char buffer[], struct server_bank *server_bank){
+    char nickname[20];
+    char password[20];
+    char *token= strtok(buffer, "/");
+    token = strtok(NULL, "/");
+    strcpy(nickname, token);
+    token = strtok(NULL, "/");
+    strcpy(password, token);
 
-    if (return_code == 0){
-        write(socket, "Enter your password:", 21);
+    strcpy(server_bank->buffer, nickname);
+    send_to_bank(server_bank);
+
+    while(1){
+        if(data_ready == 0){
+            continue;
+        }
+        else{
+            read_from_bank(server_bank);
+            data_ready = 0;
+            printf("Password: %s\n", server_bank->buffer);
+            break;
+        }
     }
-    else if (return_code == 1)
-    {
-        write(socket, "Account does not exist", 22);
-    }
+
     
-    printf("Loging into account: %s\n", nickname);
+    printf("Logging in with nickname: %s\n", nickname);
+    printf("Password: %s\n", password);
 
-
-    printf("Enter password: ");
-    fgets(pass, 100, stdin);
-    char *response = "Logged in successfully";
-    send_get_request(socket, response);
+    char *response = "200 OK";
+    send_response(socket, response);
 }
 
-void handle_create_acc(int socket, char buffer[]){
-    char *nickname = strtok(buffer, ":");
-    nickname = strtok(NULL, ":");
-    printf("Creating account with nickname: %s\n", nickname);
-    //request password
+void handle_create_acc(int socket, char buffer[], struct server_bank *server_bank){
+    char nickname[20];
+    char password[20];
+    char *token= strtok(buffer, "/");
+    token = strtok(NULL, "/");
+    strcpy(nickname, token);
+    token = strtok(NULL, "/");
+    strcpy(password, token);
 
-    //create account with bank thru pipes or shared memory
-    //send response
-    char *response = "Account created";
-    send_get_request(socket, response);
+    strcpy(server_bank->buffer, nickname);
+    send_to_bank(server_bank);
+
+    while(1){
+        if(data_ready == 0){
+            continue;
+        }
+        else{
+            read_from_bank(server_bank);
+            data_ready = 0;
+            printf("Password: %s\n", server_bank->buffer);
+            break;
+        }
+    }
+
+    printf("Creating account with nickname: %s\n", nickname);
+    printf("Password: %s\n", password);
+
+    char *response = "200 OK";
+    send_response(socket, response);
 }
 
 void send_to_bank(struct server_bank *server_bank){
-    printf("BANK PID: %d\n", server_bank->bank_pid);
     sem_wait(server_bank->sem_server);
-    sigsusr1_send(server_bank->bank_pid);
-    printf("SERVER: Data written in memory: %s \n", server_bank->buffer);
     strcpy(server_bank->shared_mem, server_bank->buffer);
-    // bzero(server_bank->buffer, 1024);
     sem_post(server_bank->sem_bank);
+    sem_post(server_bank->sem_bank);
+    sigsusr1_send(server_bank->bank_pid);
 }
 
 void read_from_bank(struct server_bank *server_bank){
     sem_wait(server_bank->sem_server);
-    printf("SERVER: Data read from memory: %s\n", server_bank->shared_mem);
     strcpy(server_bank->buffer, server_bank->shared_mem);
-    // bzero(server_bank->shared_mem, 1024);
     sem_post(server_bank->sem_bank);
 }
 
 
-void sigsusr1_handler(int signo){
-    printf("GOTTEN:SER\n");
+void sigusr1_handler(int signo){
     data_ready = 1;
 }
 

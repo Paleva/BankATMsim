@@ -30,7 +30,7 @@ struct bank_server{
     semaphore *sem_bank;
     semaphore *sem_server;
     char *shared_mem;
-    int server_pid;
+    pid_t server_pid;
     char buffer[1024];
 };
 
@@ -44,21 +44,27 @@ void verify_password();
 void deposit_money();
 
 semaphore *semaphore_open(char* name, int init_val);
+
 struct account *read_accounts(char *filename, int *account_number);
 
 int shared_mem_id(int key);
 char *shared_mem_ptr(int key);
 
-void sigusr1_handler(int signum);
+void sigusr1_handler(int signum, siginfo_t *info, void *ucontext);
+void sigchld_handler(int signum);
+void sigint_handler(int signum);
+
 void sigusr1_send(int pid);
 
 void send_to_server(struct bank_server *bank_server);
+void read_from_server(struct bank_server *bank_server);
 
+struct bank_server *bank_server;
 
 int main(){
     int account_amount = 0;
     struct account *accounts = read_accounts(ACCOUNTS, &account_amount);
-    struct bank_server *bank_server = malloc(sizeof(struct bank_server));
+    bank_server = malloc(sizeof(struct bank_server));
 
     sem_unlink(SEMKEYBANK);
     sem_unlink(SEMKEYSERVER);
@@ -66,12 +72,12 @@ int main(){
     bank_server->shared_mem = shared_mem_ptr(shmid);
     bank_server->sem_bank = semaphore_open(SEMKEYBANK, 0);
     bank_server->sem_server = semaphore_open(SEMKEYSERVER, 1);
-
+    bank_server->server_pid = 0;
 
     struct sigaction sa;
     bzero(&sa, sizeof(sa));
-    sa.sa_handler = &sigusr1_handler;
-    sa.sa_flags = SA_RESTART;
+    sa.sa_sigaction = &sigusr1_handler;
+    sa.sa_flags = SA_RESTART | SA_SIGINFO;
     if(sigaction(SIGUSR1, &sa, NULL) == -1){
         perror("sigaction");
         exit(EXIT_FAILURE);
@@ -86,6 +92,14 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+    struct sigaction sa_sigint;
+    bzero(&sa, sizeof(sa_sigint));
+    sa_sigint.sa_handler = &sigint_handler;    
+    if(sigaction(SIGINT, &sa_sigint, NULL) == -1){
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
 
     pid_t server_proc = fork();
     if(server_proc < 0){
@@ -93,7 +107,7 @@ int main(){
         exit(EXIT_FAILURE);
     }
     if(server_proc == 0){
-        execl("./server", NULL);
+        execl("./server", "./server", (char*)NULL);
         printf("Server pid: %d\n", server_proc);
     }
     else {
@@ -106,15 +120,12 @@ int main(){
                 read_from_server(bank_server);
                 int index = check_if_acc_exists(accounts, bank_server->buffer, account_amount);
                 if (index > 0) {
-                    // bank_server->buffer = malloc(sizeof(accounts[index].password));
                     strcpy(bank_server->buffer, accounts[index].password);
                     send_to_server(bank_server);
-                    free(bank_server->buffer);
                     data_ready = 0;
                 } else {
                     strcpy(bank_server->buffer, "NOACC");
                     send_to_server(bank_server);
-                    free(bank_server->buffer);
                     data_ready = 0;
                 }
             }
@@ -125,7 +136,9 @@ int main(){
                 sem_destroy(bank_server->sem_server);
                 shmctl(shmid, IPC_RMID, NULL);
                 shmdt(bank_server->shared_mem);
+                free(bank_server);
                 free(accounts);
+                exit(EXIT_SUCCESS);
             }
         }
     }
@@ -133,13 +146,18 @@ int main(){
     return 0;
 }
 
-void do_with_semaphores(char* shared, char *str, semaphore *sem_bank, semaphore *sem_server){
+void send_to_server(struct bank_server *bank_server){
+    sem_wait(bank_server->sem_bank);
+    strcpy(bank_server->shared_mem, bank_server->buffer);
+    sem_post(bank_server->sem_server);
+    sem_post(bank_server->sem_server);
+    sigusr1_send(bank_server->server_pid);
+}
 
-    sem_wait(sem_bank);
-    printf("Data written in memory: %s\n", str);
-    strcpy(shared, str);
-    sem_post(sem_server);
-
+void read_from_server(struct bank_server *bank_server){
+    sem_wait(bank_server->sem_bank);
+    strcpy(bank_server->buffer, bank_server->shared_mem);
+    sem_post(bank_server->sem_server);
 }
 
 semaphore *semaphore_open(char *name, int init_val){
@@ -211,15 +229,21 @@ char *shared_mem_ptr(int shmid){
     return str;
 }
 
-
-void sigusr1_handler(int signum){
-    printf("Received signal %d\n", signum);
-}
-
 void sigusr1_send(int pid){
     kill(pid, SIGUSR1);
 }
 
-void sigchld_handler(int signo){
+void sigusr1_handler(int signum, siginfo_t *info, void *ucontext){
+    data_ready = 1;
+    bank_server->server_pid = info->si_pid;
+}
+
+
+void sigchld_handler(int signum){
     while(waitpid(-1, NULL, WNOHANG) > 0); // figure how this works
+}
+
+void sigint_handler(int signum){
+    exit_flag = 1;
+    printf("Exiting\n");
 }
