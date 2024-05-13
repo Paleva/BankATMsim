@@ -33,14 +33,13 @@ struct bank_server{
     char buffer[1024];
 };
 
-
+//201 CREATED
 int create_acc();
-
+//202 ACCEPTED
+int deposit_money();
+// 200 OK or 404 NOTFOUND
 int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount);
 
-void send_password();
-void verify_password();
-void deposit_money();
 
 semaphore *semaphore_open(char* name, int init_val);
 
@@ -86,7 +85,7 @@ int main(){
     }
 
     struct sigaction sa_chld;
-    bzero(&sa, sizeof(sa_chld));
+    bzero(&sa_chld, sizeof(sa_chld));
     sa_chld.sa_handler = &sigchld_handler;
     sa_chld.sa_flags = SA_RESTART;
     if(sigaction(SIGCHLD, &sa_chld, NULL) == -1){
@@ -94,13 +93,13 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
-    struct sigaction sa_sigint;
-    bzero(&sa_sigint, sizeof(sa_sigint));
-    sa_sigint.sa_handler = &sigint_handler;
-    if(sigaction(SIGINT, &sa_sigint, NULL) == -1){
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
+    // struct sigaction sa_sigint;
+    // bzero(&sa_sigint, sizeof(sa_sigint));
+    // sa_sigint.sa_handler = &sigint_handler;
+    // if(sigaction(SIGINT, &sa_sigint, NULL) == -1){
+    //     perror("sigaction");
+    //     exit(EXIT_FAILURE);
+    // }
 
 
     pid_t server_proc = fork();
@@ -110,7 +109,6 @@ int main(){
     }
     if(server_proc == 0){
         execl("./server", "./server", (char*)NULL);
-        printf("Server pid: %d\n", server_proc);
     }
     else {
         while (1) {
@@ -118,18 +116,41 @@ int main(){
                 continue;
             } 
             else {
-                printf("Data ready!!!!1\n");
+                data_ready = 0;
                 read_from_server(bank_server);
-                int index = check_if_acc_exists(accounts, bank_server->buffer, account_amount);
-                if (index > 0) {
-                    strcpy(bank_server->buffer, accounts[index].password);
-                    send_to_server(bank_server);
-                    data_ready = 0;
-                } else {
-                    strcpy(bank_server->buffer, "NOACC");
-                    send_to_server(bank_server);
-                    data_ready = 0;
+                char method[10] = {0};
+                char path[500] = {0};
+                sscanf(bank_server->buffer, "%s %s", method, path);
+                
+                if(strstr(method, "GET") != NULL && strstr(path, "/login/")){
+                    printf("LOGIN\n");
                 }
+                else if(strstr(method, "PUT") != NULL && strstr(path, "/create/")){
+                    printf("CREATE\n");
+                }
+                else if(strstr(method, "PUT") != NULL && strstr(path, "/deposit/")){
+                    printf("DEPOSIT\n");
+                }
+                else if(strstr(method, "GET") != NULL && strstr(path, "/withdraw/")){
+                    printf("WITHDRAW\n");
+                }
+                else if(strstr(method, "GET") != NULL && strstr(path, "/balance/")){
+                    printf("BALANCE\n");
+                }
+                else if(strstr(method, "GET") != NULL && strstr(path, "/exit/")){
+                    printf("EXIT\n");
+                }
+                // int index = check_if_acc_exists(accounts, path, account_amount);
+                // if (index > 0) {
+                //     strcpy(bank_server->buffer, accounts[index].password);
+                //     send_to_server(bank_server);
+                //     data_ready = 0;
+                // } 
+                // else {
+                //     strcpy(bank_server->buffer, "404");
+                //     send_to_server(bank_server);
+                //     data_ready = 0;
+                // }
             }
             if(exit_flag > 0){
                 printf("Exiting\n");
@@ -154,7 +175,6 @@ void send_to_server(struct bank_server *bank_server){
     strcpy(bank_server->shared_mem, bank_server->buffer);
     printf("SENDING TO SERVER: %s\n", bank_server->shared_mem);
     sem_post(bank_server->sem_server);
-    // sem_post(bank_server->sem_server);
     sigusr1_send(bank_server->server_pid);
 }
 
@@ -176,11 +196,14 @@ semaphore *semaphore_open(char *name, int init_val){
 
 int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount){
     int i;
+    char *token = strtok(nickname, "/");
+    token = strtok(NULL, "/");
+    strcpy(nickname, token);
+    printf("NICKNAME: %s\n", token);
     printf("BANK IS CHECKING \n");
     for (i = 0; i < accounts_amount; i++){
         printf("BANK: %s\n", accounts[i].nickname);
         if(strcmp(accounts[i].nickname, nickname) == 0){
-            printf("ACC FOUND");
             return i;
         }
     }

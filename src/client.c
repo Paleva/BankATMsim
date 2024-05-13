@@ -12,10 +12,9 @@
 void login_into_acc(int sock);
 void create_acc(int sock);
 
-int send_get_request(int sock, char *request);
-int send_put_request(int sock, char *request);
+int send_request(int sock, char *request);
 
-void handle_response(int sock);
+int handle_response(int sock);
 
 int main(){
 
@@ -44,30 +43,44 @@ int main(){
     if(response[0] == 'y'){
         response[4] = '\0'; //remove newline character
         login_into_acc(sockfd);
-        handle_response(sockfd);
+        if(handle_response(sockfd) == 200){
+            printf("You are now logged in\n");
+        }
+        else if(handle_response(sockfd) == 404){
+            printf("Account not found\n");
+        }
+        else{
+            printf("Error\n");
+        }
+        
     }
     else{
         create_acc(sockfd);
         handle_response(sockfd);
+        if(handle_response(sockfd) == 201){
+            printf("Account created\n");
+        }
     }
 
 
     return 0;
 }
 
-int send_get_request(int sock, char *request){
-    send(sock, request, strlen(request), 0);
-    return 0;
-}
-int send_put_request(int sock, char *request){
+int send_request(int sock, char *request){
     send(sock, request, strlen(request), 0);    
     return 0;
 }
 
-void handle_response(int sock){
+int handle_response(int sock){
+    char buffer[1024] = {0};
+    read(sock, buffer, 1024);
+
+    char code[4];
     char response[1024];
-    recv(sock, response, 1024, 0);
-    printf("Response: %s\n", response);
+    sscanf(buffer, "%s %s", code, response);
+    printf("Response: %d %s\n", atoi(code), response);
+
+    return atoi(code);
 }
 
 
@@ -93,7 +106,7 @@ void login_into_acc(int sock){
     
     printf("You entered: %s\n", request);
     
-    send_get_request(sock, request);
+    send_request(sock, request);
 }
 
 void create_acc(int sock){
@@ -116,6 +129,6 @@ void create_acc(int sock){
     request[strlen(nickname)-1] = '\0';
     
     printf("You entered: %s\n", nickname);
-    send_put_request(sock, request);
+    send_request(sock, request);
 
 }
