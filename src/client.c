@@ -78,7 +78,6 @@ int handle_response(int sock){
     char code[4];
     char response[1024];
     sscanf(buffer, "%s %s", code, response);
-    printf("Response: %d %s\n", atoi(code), response);
 
     return atoi(code);
 }

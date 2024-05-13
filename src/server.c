@@ -204,11 +204,11 @@ void handle_put_request(int socket, char buffer[], struct server_bank *server_ba
 void handle_login(int socket, char buffer[], struct server_bank *server_bank){
     char nickname[20];
     char password[20];
-    char *token= strtok(buffer, "/");
-    token = strtok(NULL, "/");
-    strcpy(nickname, token);
-    token = strtok(NULL, "/");
-    strcpy(password, token);
+    char *token= strtok(buffer, " ");
+    // token = strtok(NULL, "/");
+    // strcpy(nickname, token);
+    // token = strtok(NULL, "/");
+    // strcpy(password, token);
 
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
@@ -217,13 +217,12 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
         if(data_ready == 1){
             read_from_bank(server_bank);
             data_ready = 0;
-            printf("SERVER: Password: %s\n", server_bank->buffer);
             if(strstr(server_bank->buffer, "404")){
-                char *response = "404 NOTFOUND";
+                char *response = "404 NOT FOUND";
                 send_response(socket, response);
             }
             else{
-                char *response = "201 CREATED";
+                char *response = "200 OK";
                 send_response(socket, response);
             }
             break;
@@ -289,7 +288,6 @@ void read_from_bank(struct server_bank *server_bank){
     sem_wait(server_bank->sem_server);
     strcpy(server_bank->buffer, server_bank->shared_mem);
     printf("READING FROM BANK: %s\n", server_bank->buffer);
-    sem_post(server_bank->sem_bank);
 }
 
 void send_response(int sock, char *request){

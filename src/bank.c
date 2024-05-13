@@ -38,6 +38,7 @@ int create_acc();
 //202 ACCEPTED
 int deposit_money();
 // 200 OK or 404 NOTFOUND
+int login(struct account *accounts, char nickname[], int accounts_amount);
 int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount);
 
 
@@ -93,13 +94,13 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
-    // struct sigaction sa_sigint;
-    // bzero(&sa_sigint, sizeof(sa_sigint));
-    // sa_sigint.sa_handler = &sigint_handler;
-    // if(sigaction(SIGINT, &sa_sigint, NULL) == -1){
-    //     perror("sigaction");
-    //     exit(EXIT_FAILURE);
-    // }
+    struct sigaction sa_sigint;
+    bzero(&sa_sigint, sizeof(sa_sigint));
+    sa_sigint.sa_handler = &sigint_handler;
+    if(sigaction(SIGINT, &sa_sigint, NULL) == -1){
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
 
 
     pid_t server_proc = fork();
@@ -111,60 +112,62 @@ int main(){
         execl("./server", "./server", (char*)NULL);
     }
     else {
-        while (1) {
+        while (exit_flag == 0) {
             if (data_ready == 0) {
                 continue;
             } 
             else {
                 data_ready = 0;
                 read_from_server(bank_server);
-                char method[10] = {0};
                 char path[500] = {0};
-                sscanf(bank_server->buffer, "%s %s", method, path);
+                sscanf(bank_server->buffer, "%s", path);
+                printf("PATH: %s\n", path);
                 
-                if(strstr(method, "GET") != NULL && strstr(path, "/login/")){
+                if(strstr(path, "/login/")){
                     printf("LOGIN\n");
+                    int status = login(accounts, path, account_amount);
+                    if(status != 404){
+                        char response[1024] = "200 OK/";
+                        strcat(response, accounts[status].nickname);
+                        strcpy(bank_server->buffer, response);
+                        send_to_server(bank_server);
+                        data_ready = 0;
+                    }
+                    else{
+                        strcpy(bank_server->buffer, "404 NOT FOUND");
+                        send_to_server(bank_server);
+                        data_ready = 0;
+                    }
                 }
-                else if(strstr(method, "PUT") != NULL && strstr(path, "/create/")){
+                else if(strstr(path, "/create/")){
                     printf("CREATE\n");
                 }
-                else if(strstr(method, "PUT") != NULL && strstr(path, "/deposit/")){
+                else if(strstr(path, "/deposit/")){
                     printf("DEPOSIT\n");
                 }
-                else if(strstr(method, "GET") != NULL && strstr(path, "/withdraw/")){
+                else if(strstr(path, "/withdraw/")){
                     printf("WITHDRAW\n");
                 }
-                else if(strstr(method, "GET") != NULL && strstr(path, "/balance/")){
+                else if(strstr(path, "/balance/")){
                     printf("BALANCE\n");
                 }
-                else if(strstr(method, "GET") != NULL && strstr(path, "/exit/")){
+                else if(strstr(path, "/exit/")){
                     printf("EXIT\n");
                 }
-                // int index = check_if_acc_exists(accounts, path, account_amount);
-                // if (index > 0) {
-                //     strcpy(bank_server->buffer, accounts[index].password);
-                //     send_to_server(bank_server);
-                //     data_ready = 0;
-                // } 
-                // else {
-                //     strcpy(bank_server->buffer, "404");
-                //     send_to_server(bank_server);
-                //     data_ready = 0;
-                // }
             }
             if(exit_flag > 0){
-                printf("Exiting\n");
-                sem_close(bank_server->sem_bank);
-                sem_close(bank_server->sem_server);
-                sem_destroy(bank_server->sem_bank);
-                sem_destroy(bank_server->sem_server);
-                shmctl(shmid, IPC_RMID, NULL);
-                shmdt(bank_server->shared_mem);
-                free(bank_server);
-                free(accounts);
-                exit(EXIT_SUCCESS);
             }
         }
+        printf("Exiting\n");
+        sem_close(bank_server->sem_bank);
+        sem_close(bank_server->sem_server);
+        sem_destroy(bank_server->sem_bank);
+        sem_destroy(bank_server->sem_server);
+        shmctl(shmid, IPC_RMID, NULL);
+        shmdt(bank_server->shared_mem);
+        free(bank_server);
+        free(accounts);
+        exit(EXIT_SUCCESS);
     }
 
     return 0;
@@ -182,16 +185,18 @@ void read_from_server(struct bank_server *bank_server){
     sem_wait(bank_server->sem_bank);
     strcpy(bank_server->buffer, bank_server->shared_mem);
     printf("READING FROM SERVER: %s\n", bank_server->buffer);
-    sem_post(bank_server->sem_server);
+    // sem_post(bank_server->sem_server);
+    printf("STUCK HERE\n");
 }
 
-semaphore *semaphore_open(char *name, int init_val){
-    semaphore *sem = sem_open(name, O_CREAT, 0644, init_val);
-    if(sem == SEM_FAILED){
-        perror("sem_open_bank");
-        exit(EXIT_FAILURE);
+int login(struct account *accounts, char nickname[], int accounts_amount){
+    int index = check_if_acc_exists(accounts, nickname, accounts_amount);
+    if(index > 0){
+        return index;
     }
-    return sem;
+    else{
+        return 404;
+    }
 }
 
 int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount){
@@ -239,6 +244,15 @@ struct account *read_accounts(char *filename, int *account_number){
     return accounts;
 }
 
+semaphore *semaphore_open(char *name, int init_val){
+    semaphore *sem = sem_open(name, O_CREAT, 0644, init_val);
+    if(sem == SEM_FAILED){
+        perror("sem_open_bank");
+        exit(EXIT_FAILURE);
+    }
+    return sem;
+}
+
 int shared_mem_id(int key){
     int shmid = shmget(key, 1024, 0666|IPC_CREAT);
     if (shmid == -1){
@@ -266,7 +280,7 @@ void sigusr1_handler(int signum, siginfo_t *info, void *ucontext){
     server_pid = info->si_pid;
 }
 void sigint_handler(int signum){
-    exit_flag = signum;
+    exit_flag = 1;
 }
 void sigchld_handler(int signum){
     while(waitpid(-1, NULL, WNOHANG) > 0); // figure how this works
