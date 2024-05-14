@@ -12,7 +12,7 @@ int main(){
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(PORT);
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
+    // serv_addr.sin_addr.s_addr = INADDR_ANY;
 
     if(connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
@@ -38,6 +38,12 @@ int main(){
                 fgets(response, 5, stdin);
                 if(response[0] == '1'){
                     deposit_money(sockfd);
+                    if(handle_response(sockfd) == 202){
+                        printf("Money deposited\n");
+                    }
+                    else{
+                        printf("Error while depositing\n");
+                    }
                 }
                 else if(response[0] == '2'){
                     withdraw_money(sockfd);
@@ -46,7 +52,7 @@ int main(){
                     fetch_balance(sockfd);
                 }
                 else if(response[0] == '4'){
-                    exit(EXIT_SUCCESS);
+                    close_connection(sockfd);
                 }
             }while(strlen(response) > 1);
         }
@@ -72,7 +78,6 @@ int main(){
 
 int send_request(int sock, char *request){
     send(sock, request, strlen(request), 0);
-    printf("CLIENT: Request sent: %s\n", request);    
     return 0;
 }
 
@@ -158,4 +163,8 @@ void withdraw_money(int sock){
 void fetch_balance(int sock){
     char *request_temp = "GET /balance/";
 
+}
+
+void close_connection(int sock){
+    char *request_temp = "GET /exit/";
 }

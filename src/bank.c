@@ -6,6 +6,7 @@ volatile sig_atomic_t server_pid = 0;
 
 int main(){
     int account_amount = 0;
+    int current_account = 0;
     struct account *accounts = read_accounts(&account_amount);
     struct bank_server *bank_server = malloc(sizeof(struct bank_server));
 
@@ -67,6 +68,7 @@ int main(){
                 if(strstr(path, "/login/")){
                     printf("LOGIN\n");
                     int status = login(accounts, path, account_amount);
+                    current_account = status;
                     if(status != 404){
                         char response[1024] = "200 OK/";
                         strcat(response, accounts[status].password);
@@ -81,6 +83,7 @@ int main(){
                 else if(strstr(path, "/create/")){
                     printf("CREATE\n");
                     int status = create_acc(accounts, path, &account_amount);
+                    current_account = status;
                     if(status == 201){
                         strcpy(bank_server->buffer, "201 CREATED");
                         send_to_server(bank_server);
@@ -92,6 +95,16 @@ int main(){
                 }
                 else if(strstr(path, "/deposit/")){
                     printf("DEPOSIT\n");
+                    int status = deposit_money(accounts, path, current_account);
+                    update_db(accounts, &account_amount);
+                    if(status == 202){
+                        strcpy(bank_server->buffer, "202 ACCEPTED");
+                        send_to_server(bank_server);
+                    }
+                    else{
+                        strcpy(bank_server->buffer, "404 NOT FOUND");
+                        send_to_server(bank_server);
+                    }
                 }
                 else if(strstr(path, "/withdraw/")){
                     printf("WITHDRAW\n");
@@ -136,15 +149,20 @@ void read_from_server(struct bank_server *bank_server){
     printf("READING FROM SERVER: %s\n", bank_server->buffer);
 }
 
-int deposit_money(){
-    return 200;
+int deposit_money(struct account *accounts, char buffer[], int current_account){
+    char amount[20];
+    char *token = strtok(buffer, "/");
+    token = strtok(NULL, "/");
+    int64_t amount_to_deposit = atol(token);
+    accounts[current_account].balance += amount_to_deposit;
+    return 202;
 }
 
 int create_acc(struct account *accounts, char buffer[], int *accounts_amount){
-    char *token = strtok(buffer, "/");
-    token = strtok(NULL, "/");
     char nickname[20];
     char password[20];
+    char *token = strtok(buffer, "/");
+    token = strtok(NULL, "/");
     strcpy(nickname, token);
     token = strtok(NULL, "/");
     strcpy(password, token);

@@ -73,9 +73,10 @@ int main(){
                 close(sockfd); // close original socket because accept creates a new one
                 printf("IM KID\n PID: %d \n", getpid());
                 while(1){
+                    //TODO handle request properly so they dont loop forever
                     int request = 0;
                     if(request == 0){
-                        handle_request(new_connection_socket, server_bank);
+                        request = handle_request(new_connection_socket, server_bank);
                     }
                     else if(request < 0){
                         close(new_connection_socket);
@@ -100,11 +101,10 @@ int main(){
     return 0;
 }
 
-void handle_request(int socket, struct server_bank *server_bank){
+int handle_request(int socket, struct server_bank *server_bank){
     
     char buffer[1024] = {0};
     read(socket, buffer, 1024);
-    printf("SERVER: Request: %s\n", buffer);
     char method[10] = {0};
     char path[500] = {0};
 
@@ -114,13 +114,20 @@ void handle_request(int socket, struct server_bank *server_bank){
 
     if(strstr(method, "GET") != NULL){
         handle_get_request(socket, path, server_bank);
+        return 0;
     }
     else if(strstr(method, "PUT") != NULL){
         handle_put_request(socket, path, server_bank);
+        return 0;
+    }
+    else if(strstr(path, "exit") != NULL){
+        return 1;
     }
     else{
         printf("Invalid request\n");
+        return 0;
     }
+    return 0;
 }
 
 
@@ -128,6 +135,7 @@ void handle_get_request(int socket, char buffer[], struct server_bank *server_ba
     char *login = "login";
     char *withdraw = "withdraw";
     char *balance = "balance";
+    char *exit = "exit";
 
     if(strstr(buffer, login) != NULL){
         handle_login(socket, buffer, server_bank);
@@ -150,7 +158,6 @@ void handle_put_request(int socket, char buffer[], struct server_bank *server_ba
         handle_create_acc(socket, buffer, server_bank);
     }
     else if (strstr(buffer, deposit) != NULL){
-        printf("DEPOSIT\n");
         deposit_money(socket, buffer, server_bank);
     }
     else{

@@ -47,9 +47,9 @@ void withdraw_money(int socket, char buffer[], struct server_bank *server_bank);
 void handle_login(int socket, char buffer[], struct server_bank *server_bank);
 void handle_create_acc(int socket, char buffer[], struct server_bank *server_bank);
 
+int handle_request(int socket, struct server_bank *server_bank);
 void handle_get_request(int socket, char buffer[], struct server_bank *server_bank);
 void handle_put_request(int socket, char buffer[], struct server_bank *server_bank);
-void handle_request(int socket, struct server_bank *server_bank);
 void send_response(int sock, char *request);
 
 void sigsusr1_send(int pid);

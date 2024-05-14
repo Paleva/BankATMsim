@@ -39,7 +39,7 @@ struct bank_server{
 //201 CREATED
 int create_acc(struct account *accounts, char buffer[], int *accounts_amount);
 //202 ACCEPTED
-int deposit_money();
+int deposit_money(struct account *accounts, char buffer[], int current_account);
 // 200 OK or 404 NOTFOUND
 int login(struct account *accounts, char path[], int accounts_amount);
 int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount);

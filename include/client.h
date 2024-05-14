@@ -18,6 +18,8 @@ void deposit_money(int sock);
 void withdraw_money(int sock);
 void fetch_balance(int sock);
 
+void close_connection(int sock);
+
 int send_request(int sock, char *request);
 
 int handle_response(int sock);
