@@ -4,7 +4,7 @@
 CC = gcc
 
 # Compiler flags
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra -g
 
 # Source files
 SRCS_BANK = src/bank.c
@@ -23,8 +23,6 @@ TARGET_CLIENT = client
 # Default target
 all: $(TARGET_BANK) $(TARGET_SERVER) $(TARGET_CLIENT) 
 
-debug: CFLAGS += -DDEBUG
-debug: all
 
 # Compile source files into object files
 %.o: %.c

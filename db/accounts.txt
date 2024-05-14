@@ -1,3 +1,8 @@
 Voitke:1234:0
 Voitkevicius:123456:200
 Arnas:123456789:500
+on:on:0
+on:nnno:0
+oplia:n:0
+ok:ko:0
+on:nnnn:0

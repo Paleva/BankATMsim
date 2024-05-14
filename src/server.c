@@ -1,57 +1,6 @@
-#include <unistd.h>
-#include <sys/shm.h>
-#include <sys/types.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <semaphore.h>
-#include <signal.h>
-
-typedef sem_t semaphore;
-
-#define SHMKEY 0x1234
-#define PORT 8080
-#define MAX_CONNECTIONS 5
-#define SEMKEYBANK "/semaphorebank"
-#define SEMKEYSERVER "/semaphoreserver"
+#include "../include/server.h"
 
 volatile int data_ready = 0;
-
-
-struct server_bank{
-    int bank_pid;
-    char *shared_mem;
-    char buffer[1024];
-    semaphore *sem_bank;
-    semaphore *sem_server;
-};
-
-semaphore *semaphore_open(char* name);
-
-int shared_mem_id(int key);
-char *shared_mem_ptr(int key);
-
-void read_from_bank(struct server_bank *server_bank);
-void send_to_bank(struct server_bank *server_bank);
-
-void deposit_money(int socket, char buffer[], struct server_bank *server_bank); 
-void fetch_balance(int socket, char buffer[], struct server_bank *server_bank);
-void withdraw_money(int socket, char buffer[], struct server_bank *server_bank);
-
-void handle_login(int socket, char buffer[], struct server_bank *server_bank);
-void handle_create_acc(int socket, char buffer[], struct server_bank *server_bank);
-
-void handle_get_request(int socket, char buffer[], struct server_bank *server_bank);
-void handle_put_request(int socket, char buffer[], struct server_bank *server_bank);
-void handle_request(int socket, struct server_bank *server_bank);
-void send_response(int sock, char *request);
-
-void sigsusr1_send(int pid);
-void sigchld_handler(int signum);
-void sigusr1_handler(int signum);
 
 int main(){
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -179,7 +128,6 @@ void handle_get_request(int socket, char buffer[], struct server_bank *server_ba
     else if (strstr(buffer, withdraw) != NULL){
         withdraw_money(socket, buffer, server_bank);
     }
-    
     else{
         printf("Invalid request\n");
     }
@@ -205,10 +153,6 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
     char nickname[20];
     char password[20];
     char *token= strtok(buffer, " ");
-    // token = strtok(NULL, "/");
-    // strcpy(nickname, token);
-    // token = strtok(NULL, "/");
-    // strcpy(password, token);
 
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
@@ -240,25 +184,29 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
 void handle_create_acc(int socket, char buffer[], struct server_bank *server_bank){
     char nickname[20];
     char password[20];
-    char *token= strtok(buffer, "/");
-    token = strtok(NULL, "/");
-    strcpy(nickname, token);
-    token = strtok(NULL, "/");
-    strcpy(password, token);
+    char *token= strtok(buffer, " ");
 
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
 
     while(1){
-        if(data_ready == 0){
-            continue;
-        }
-        else{
+        if(data_ready == 1){
             read_from_bank(server_bank);
+            data_ready = 0;
+            if(strstr(server_bank->buffer, "201")){
+                char *response = "201 CREATED";
+                send_response(socket, response);
+            }
+            else{
+                char *response = "400 BAD REQUEST";
+                send_response(socket, response);
+            }
             printf("Creating account with nickname: %s\n", nickname);
             printf("Password: %s\n", server_bank->buffer);
-            data_ready = 0;
             break;
+        }
+        else{
+            continue;
         }
     }
 }

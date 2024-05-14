@@ -1,63 +1,4 @@
-#include <sys/shm.h>
-#include <sys/types.h>
-#include <sys/wait.h>   
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <semaphore.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <bits/sigaction.h>
-
-typedef sem_t semaphore;
-
-#define SHMKEY 0x1234
-#define SEMKEYBANK "/semaphorebank"
-#define SEMKEYSERVER "/semaphoreserver"
-#define ACCOUNTS "db/accounts.txt"
-
-
-struct account {
-    char nickname[20];
-    char password[20];
-    int balance;
-};
-
-struct bank_server{
-    semaphore *sem_bank;
-    semaphore *sem_server;
-    char *shared_mem;
-    pid_t server_pid;
-    char buffer[1024];
-};
-
-//201 CREATED
-int create_acc();
-//202 ACCEPTED
-int deposit_money();
-// 200 OK or 404 NOTFOUND
-int login(struct account *accounts, char nickname[], int accounts_amount);
-int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount);
-
-
-semaphore *semaphore_open(char* name, int init_val);
-
-struct account *read_accounts(char *filename, int *account_number);
-
-int shared_mem_id(int key);
-char *shared_mem_ptr(int key);
-
-void sigusr1_handler(int signum, siginfo_t *info, void *ucontext);
-void sigchld_handler(int signum);
-void sigint_handler(int signum);
-
-void sigusr1_send(int pid);
-
-void send_to_server(struct bank_server *bank_server);
-void read_from_server(struct bank_server *bank_server);
-
+#include "../include/bank.h"
 
 volatile sig_atomic_t data_ready = 0;
 volatile sig_atomic_t exit_flag = 0;
@@ -65,7 +6,7 @@ volatile sig_atomic_t server_pid = 0;
 
 int main(){
     int account_amount = 0;
-    struct account *accounts = read_accounts(ACCOUNTS, &account_amount);
+    struct account *accounts = read_accounts(&account_amount);
     struct bank_server *bank_server = malloc(sizeof(struct bank_server));
 
     sem_unlink(SEMKEYBANK);
@@ -128,19 +69,26 @@ int main(){
                     int status = login(accounts, path, account_amount);
                     if(status != 404){
                         char response[1024] = "200 OK/";
-                        strcat(response, accounts[status].nickname);
+                        strcat(response, accounts[status].password);
                         strcpy(bank_server->buffer, response);
                         send_to_server(bank_server);
-                        data_ready = 0;
                     }
                     else{
                         strcpy(bank_server->buffer, "404 NOT FOUND");
                         send_to_server(bank_server);
-                        data_ready = 0;
                     }
                 }
                 else if(strstr(path, "/create/")){
                     printf("CREATE\n");
+                    int status = create_acc(accounts, path, &account_amount);
+                    if(status == 201){
+                        strcpy(bank_server->buffer, "201 CREATED");
+                        send_to_server(bank_server);
+                    }
+                    else{
+                        strcpy(bank_server->buffer, "404 NOT FOUND");
+                        send_to_server(bank_server);
+                    }
                 }
                 else if(strstr(path, "/deposit/")){
                     printf("DEPOSIT\n");
@@ -185,8 +133,22 @@ void read_from_server(struct bank_server *bank_server){
     sem_wait(bank_server->sem_bank);
     strcpy(bank_server->buffer, bank_server->shared_mem);
     printf("READING FROM SERVER: %s\n", bank_server->buffer);
-    // sem_post(bank_server->sem_server);
-    printf("STUCK HERE\n");
+    sem_post(bank_server->sem_server);
+}
+
+int create_acc(struct account *accounts, char buffer[], int *accounts_amount){
+    char *token = strtok(buffer, "/");
+    token = strtok(NULL, "/");
+    char nickname[20];
+    char password[20];
+    strcpy(nickname, token);
+    token = strtok(NULL, "/");
+    strcpy(password, token);
+    printf("NICKNAME: %s\n", nickname);
+    printf("PASSWORD: %s\n", password);
+    accounts = push(accounts, nickname, password, 0, accounts_amount);
+    update_db(accounts, accounts_amount);
+    return 201;
 }
 
 int login(struct account *accounts, char nickname[], int accounts_amount){
@@ -215,9 +177,9 @@ int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_
     return -1;
 }
 
-struct account *read_accounts(char *filename, int *account_number){
+struct account *read_accounts(int *account_number){
     FILE *file;
-    file = fopen(filename, "r");
+    file = fopen(ACCOUNTS, "r");
     if(file == NULL){
         perror("Opening file");
         exit(EXIT_FAILURE);
@@ -230,19 +192,38 @@ struct account *read_accounts(char *filename, int *account_number){
         char *nickname = strtok(line, ":");
         char *password = strtok(NULL, ":");
         char *balance = strtok(NULL, ":");
-        accounts = realloc(accounts, (*account_number + 1) * sizeof(struct account));
-        if(accounts == NULL){
-            perror("Memory allocation");
-            exit(EXIT_FAILURE);
-        }
-        strcpy(accounts[*account_number].nickname, nickname);
-        strcpy(accounts[*account_number].password, password);
-        accounts[*account_number].balance = atoi(balance);
-        (*account_number)++;
+        accounts = push(accounts, nickname, password, atoi(balance), account_number);
     }
     fclose(file);
     return accounts;
 }
+
+struct account *push(struct account *accounts, char nickname[], char password[], int balance, int *account_number){
+    accounts = realloc(accounts, (*account_number) + 1 * sizeof(struct account));
+    if(accounts == NULL){
+        perror("Memory allocation");
+        exit(EXIT_FAILURE);
+    }
+    strcpy(accounts[*account_number].nickname, nickname);
+    strcpy(accounts[*account_number].password, password);
+    accounts[*account_number].balance = balance;
+    (*account_number)++;
+    return accounts;
+}
+
+void update_db(struct account *accounts, int *account_number){
+    FILE *file;
+    file = fopen(ACCOUNTS, "w");
+    if(file == NULL){
+        perror("Opening file");
+        exit(EXIT_FAILURE);
+    }
+    int i;
+    for(i = 0; i < *account_number; i++){
+        fprintf(file, "%s:%s:%d\n", accounts[i].nickname, accounts[i].password, accounts[i].balance);
+    }
+    fclose(file);
+}   
 
 semaphore *semaphore_open(char *name, int init_val){
     semaphore *sem = sem_open(name, O_CREAT, 0644, init_val);
