@@ -72,9 +72,19 @@ int main(){
             if(pid == 0){
                 close(sockfd); // close original socket because accept creates a new one
                 printf("IM KID\n PID: %d \n", getpid());
-                handle_request(new_connection_socket, server_bank);
-                close(new_connection_socket);
-                exit(0);
+                while(1){
+                    int request = 0;
+                    if(request == 0){
+                        handle_request(new_connection_socket, server_bank);
+                    }
+                    else if(request < 0){
+                        close(new_connection_socket);
+                        exit(0);
+                    }
+                    else{
+                        continue;
+                    }
+                }
             }
             else{
                 close(new_connection_socket);
@@ -94,7 +104,7 @@ void handle_request(int socket, struct server_bank *server_bank){
     
     char buffer[1024] = {0};
     read(socket, buffer, 1024);
-
+    printf("SERVER: Request: %s\n", buffer);
     char method[10] = {0};
     char path[500] = {0};
 
@@ -140,6 +150,7 @@ void handle_put_request(int socket, char buffer[], struct server_bank *server_ba
         handle_create_acc(socket, buffer, server_bank);
     }
     else if (strstr(buffer, deposit) != NULL){
+        printf("DEPOSIT\n");
         deposit_money(socket, buffer, server_bank);
     }
     else{
@@ -161,12 +172,12 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
         if(data_ready == 1){
             read_from_bank(server_bank);
             data_ready = 0;
-            if(strstr(server_bank->buffer, "404")){
-                char *response = "404 NOT FOUND";
+            if(strstr(server_bank->buffer, "200")){
+                char *response = "200 OK";
                 send_response(socket, response);
             }
             else{
-                char *response = "200 OK";
+                char *response = "404 NOT FOUND";
                 send_response(socket, response);
             }
             break;
@@ -201,8 +212,6 @@ void handle_create_acc(int socket, char buffer[], struct server_bank *server_ban
                 char *response = "400 BAD REQUEST";
                 send_response(socket, response);
             }
-            printf("Creating account with nickname: %s\n", nickname);
-            printf("Password: %s\n", server_bank->buffer);
             break;
         }
         else{
@@ -212,7 +221,30 @@ void handle_create_acc(int socket, char buffer[], struct server_bank *server_ban
 }
 
 void deposit_money(int socket, char buffer[], struct server_bank *server_bank){
+    char balance[20];
+    // char *token= strtok(buffer, " ");
+    printf("Depositing money: %s\n", buffer);
+    strcpy(server_bank->buffer, buffer);
+    send_to_bank(server_bank);
 
+    while(1){
+        if(data_ready == 1){
+            read_from_bank(server_bank);
+            data_ready = 0;
+            if(strstr(server_bank->buffer, "202")){
+                char *response = "200 OK";
+                send_response(socket, response);
+            }
+            else{
+                char *response = "400 BAD REQUEST";
+                send_response(socket, response);
+            }
+            break;
+        }
+        else{
+            continue;
+        }
+    }
 }
 
 void fetch_balance(int socket, char buffer[], struct server_bank *server_bank){

@@ -126,6 +126,7 @@ void send_to_server(struct bank_server *bank_server){
     strcpy(bank_server->shared_mem, bank_server->buffer);
     printf("SENDING TO SERVER: %s\n", bank_server->shared_mem);
     sem_post(bank_server->sem_server);
+    sem_post(bank_server->sem_server);
     sigusr1_send(bank_server->server_pid);
 }
 
@@ -133,7 +134,10 @@ void read_from_server(struct bank_server *bank_server){
     sem_wait(bank_server->sem_bank);
     strcpy(bank_server->buffer, bank_server->shared_mem);
     printf("READING FROM SERVER: %s\n", bank_server->buffer);
-    sem_post(bank_server->sem_server);
+}
+
+int deposit_money(){
+    return 200;
 }
 
 int create_acc(struct account *accounts, char buffer[], int *accounts_amount){
@@ -151,9 +155,19 @@ int create_acc(struct account *accounts, char buffer[], int *accounts_amount){
     return 201;
 }
 
-int login(struct account *accounts, char nickname[], int accounts_amount){
-    int index = check_if_acc_exists(accounts, nickname, accounts_amount);
-    if(index > 0){
+int login(struct account *accounts, char path[], int accounts_amount){
+    char nickname_temp[20];
+    char password_temp[20];
+    char *token = strtok(path, "/");
+    token = strtok(NULL, "/");
+    strcpy(nickname_temp, token);
+    token = strtok(NULL, "/");
+    strcpy(password_temp, token);
+    int index = check_if_acc_exists(accounts, nickname_temp, accounts_amount);
+    printf("NICKNAME: %s\n", nickname_temp);
+    printf("PASSWORD: %s\n", password_temp);
+    
+    if(index >= 0){
         return index;
     }
     else{
@@ -163,14 +177,10 @@ int login(struct account *accounts, char nickname[], int accounts_amount){
 
 int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount){
     int i;
-    char *token = strtok(nickname, "/");
-    token = strtok(NULL, "/");
-    strcpy(nickname, token);
-    printf("NICKNAME: %s\n", token);
-    printf("BANK IS CHECKING \n");
     for (i = 0; i < accounts_amount; i++){
         printf("BANK: %s\n", accounts[i].nickname);
         if(strcmp(accounts[i].nickname, nickname) == 0){
+            printf("FOUND\n");
             return i;
         }
     }
@@ -199,7 +209,7 @@ struct account *read_accounts(int *account_number){
 }
 
 struct account *push(struct account *accounts, char nickname[], char password[], int balance, int *account_number){
-    accounts = realloc(accounts, (*account_number) + 1 * sizeof(struct account));
+    accounts = realloc(accounts, ((*account_number) + 1) * sizeof(struct account));
     if(accounts == NULL){
         perror("Memory allocation");
         exit(EXIT_FAILURE);

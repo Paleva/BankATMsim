@@ -25,7 +25,7 @@ typedef sem_t semaphore;
 struct account {
     char nickname[20];
     char password[20];
-    int balance;
+    int64_t balance;
 };
 
 struct bank_server{
@@ -41,7 +41,7 @@ int create_acc(struct account *accounts, char buffer[], int *accounts_amount);
 //202 ACCEPTED
 int deposit_money();
 // 200 OK or 404 NOTFOUND
-int login(struct account *accounts, char nickname[], int accounts_amount);
+int login(struct account *accounts, char path[], int accounts_amount);
 int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount);
 
 semaphore *semaphore_open(char* name, int init_val);

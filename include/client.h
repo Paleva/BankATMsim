@@ -14,6 +14,9 @@
 
 void login_into_acc(int sock);
 void create_acc(int sock);
+void deposit_money(int sock);
+void withdraw_money(int sock);
+void fetch_balance(int sock);
 
 int send_request(int sock, char *request);
 

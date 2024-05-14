@@ -29,6 +29,26 @@ int main(){
         login_into_acc(sockfd);
         if(handle_response(sockfd) == 200){
             printf("You are now logged in\n");
+            printf("What do you want to do?\n");
+            printf("1. Deposit money\n");
+            printf("2. Withdraw money\n");
+            printf("3. Check balance\n");
+            printf("4. Exit\n");
+            do{
+                fgets(response, 5, stdin);
+                if(response[0] == '1'){
+                    deposit_money(sockfd);
+                }
+                else if(response[0] == '2'){
+                    withdraw_money(sockfd);
+                }
+                else if(response[0] == '3'){
+                    fetch_balance(sockfd);
+                }
+                else if(response[0] == '4'){
+                    exit(EXIT_SUCCESS);
+                }
+            }while(strlen(response) > 1);
         }
         else if(handle_response(sockfd) == 404){
             printf("Account not found\n");
@@ -51,7 +71,8 @@ int main(){
 }
 
 int send_request(int sock, char *request){
-    send(sock, request, strlen(request), 0);    
+    send(sock, request, strlen(request), 0);
+    printf("CLIENT: Request sent: %s\n", request);    
     return 0;
 }
 
@@ -114,5 +135,27 @@ void create_acc(int sock){
     
     printf("You entered: %s\n", nickname);
     send_request(sock, request);
+
+}
+
+void deposit_money(int sock){
+    char *request_temp = "PUT /deposit/";
+    char request[1024];
+    char amount_to_deposit[20];
+    printf("Enter the amount you want to deposit: ");
+    fgets(amount_to_deposit, 20, stdin);
+    printf("You entered: %s\n", amount_to_deposit);
+    strcpy(request, request_temp);
+    strcat(request, amount_to_deposit);
+    request[strlen(request)-1] = '\0';
+    send_request(sock, request);
+}
+
+void withdraw_money(int sock){
+    char *request_temp = "GET /withdraw/";
+}
+
+void fetch_balance(int sock){
+    char *request_temp = "GET /balance/";
 
 }
