@@ -1,6 +1,6 @@
 #include "../include/server.h"
 
-volatile int data_ready = 0;
+sig_atomic_t data_ready = 0;
 
 int main(){
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -25,11 +25,6 @@ int main(){
         perror("listen");
         exit(EXIT_FAILURE);
     }
-
-
-    int new_connection_socket;
-    int addrlen = sizeof(serv_addr);
-    
     //handle zombie processes
     struct sigaction sa;
     bzero(&sa, sizeof(sa));
@@ -56,6 +51,8 @@ int main(){
     server_bank->sem_server = semaphore_open(SEMKEYSERVER);
     server_bank->bank_pid = getppid();
 
+    int new_connection_socket;
+    int addrlen = sizeof(serv_addr);
     printf("Server listening on port %d\n", PORT);
     while(1){
         //accept connection from client
@@ -66,16 +63,16 @@ int main(){
         }
 
         //handle client request in a seperate process
-        int request = 0;
         pid_t pid;
         pid = fork();
         if(pid >= 0){    
             if(pid == 0){
+                printf("SERVER: %d\n", getpid());
                 close(sockfd);
+                int request = 0;
                 while(1){
-                    request = handle_request(new_connection_socket, server_bank);
                     if(request == 0){
-                        ;
+                        request = handle_request(new_connection_socket, server_bank);
                     }
                     else if(request < 0){
                         send_response(new_connection_socket, "200 OK");
@@ -88,6 +85,7 @@ int main(){
                         free(server_bank);
                         printf("Connection closed\n");
                         exit(EXIT_SUCCESS);
+                        exit(0);
                     }
                     else{
                         send_response(new_connection_socket, "400 BAD REQUEST");
@@ -128,7 +126,7 @@ int handle_request(int socket, struct server_bank *server_bank){
         handle_put_request(socket, path, server_bank);
         return 0;
     }
-    else if(strstr(method, "exit") != NULL){
+    else if(strstr(method, "EXIT") != NULL){
         return -1;
     }
     else{
@@ -175,13 +173,14 @@ void handle_put_request(int socket, char buffer[], struct server_bank *server_ba
 
 
 void handle_login(int socket, char buffer[], struct server_bank *server_bank){
-    char nickname[20];
-    char password[20];
+     char nickname[20] = {0};
+    char password[20] = {0};
     char *token= strtok(buffer, " ");
-
+    printf("BUFFER: %s\n", buffer);
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
 
+    token = strtok(buffer, "/");
     token = strtok(NULL, "/");
     token = strtok(NULL, "/");
     strcpy(password, token);
@@ -189,14 +188,19 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
     while(1){
         if(data_ready == 1){
             read_from_bank(server_bank);
-            char *token = strtok(server_bank->buffer, "/");
-            token = strtok(NULL, "/");
-            char password_temp[20];
-            strcpy(password_temp, token);
-            printf("PASSWORD TEMP: %s\n", password_temp);
             data_ready = 0;
-            if(strstr(server_bank->buffer, "200")){
-                if(strcmp(nickname, password_temp) == 0){
+            int status;
+            char *token_ = strtok(server_bank->buffer, " ");
+            status = atoi(token_);
+            token_ = strtok(NULL, " ");
+            printf("STATUS: %d\n", status);
+            token_ = strtok(token_, "/");
+            token_ = strtok(NULL, "/");
+            char pass[20] = {0};
+            strcpy(pass, token_);
+            printf("PASS: %s\n", pass);
+            if(status == 200){
+                if(strcmp(pass, password) == 0){
                     char *response = "200 OK";
                     send_response(socket, response);
                 }
@@ -215,8 +219,6 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
             continue;
         }
     }
-
-    
     printf("Logging in with nickname: %s\n", nickname);
     printf("Password: %s\n", password);
 }
@@ -305,6 +307,7 @@ void send_response(int sock, char *request){
 
 void sigusr1_handler(int signo){
     data_ready = 1;
+
 }
 
 

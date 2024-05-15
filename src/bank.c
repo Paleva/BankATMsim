@@ -1,8 +1,8 @@
 #include "../include/bank.h"
 
-volatile sig_atomic_t data_ready = 0;
-volatile sig_atomic_t exit_flag = 0;
-volatile sig_atomic_t server_pid = 0;
+sig_atomic_t data_ready = 0;
+sig_atomic_t exit_flag = 0;
+sig_atomic_t server_pid = 0;
 
 int main(){
     int account_amount = 0;
@@ -135,7 +135,7 @@ void send_to_server(struct bank_server *bank_server){
     printf("SENDING TO SERVER: %s\n", bank_server->shared_mem);
     sem_post(bank_server->sem_server);
     sem_post(bank_server->sem_server);
-    sigusr1_send(bank_server->server_pid);
+    sigusr1_send(server_pid);
 }
 
 void read_from_server(struct bank_server *bank_server){
@@ -148,7 +148,7 @@ int deposit_money(struct account *accounts, char buffer[], int current_account){
     char amount[20];
     char *token = strtok(buffer, "/");
     token = strtok(NULL, "/");
-    int64_t amount_to_deposit = atol(token);
+    int64_t amount_to_deposit = atoll(token);
     accounts[current_account].balance += amount_to_deposit;
     return 202;
 }
@@ -161,8 +161,6 @@ int create_acc(struct account *accounts, char buffer[], int *accounts_amount){
     strcpy(nickname, token);
     token = strtok(NULL, "/");
     strcpy(password, token);
-    printf("NICKNAME: %s\n", nickname);
-    printf("PASSWORD: %s\n", password);
     accounts = push(accounts, nickname, password, 0, accounts_amount);
     update_db(accounts, accounts_amount);
     return 201;
@@ -177,9 +175,6 @@ int login(struct account *accounts, char path[], int accounts_amount){
     token = strtok(NULL, "/");
     strcpy(password_temp, token);
     int index = check_if_acc_exists(accounts, nickname_temp, accounts_amount);
-    printf("NICKNAME: %s\n", nickname_temp);
-    printf("PASSWORD: %s\n", password_temp);
-    
     if(index >= 0){
         return index;
     }
@@ -276,6 +271,7 @@ char *shared_mem_ptr(int shmid){
 }
 
 void sigusr1_send(int pid){
+    printf("BANK: %d\n", pid);
     kill(pid, SIGUSR1);
 }
 
