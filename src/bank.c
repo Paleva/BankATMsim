@@ -112,11 +112,6 @@ int main(){
                 else if(strstr(path, "/balance/")){
                     printf("BALANCE\n");
                 }
-                else if(strstr(path, "/exit/")){
-                    printf("EXIT\n");
-                }
-            }
-            if(exit_flag > 0){
             }
         }
         printf("Exiting\n");
@@ -220,7 +215,7 @@ struct account *read_accounts(int *account_number){
         char *nickname = strtok(line, ":");
         char *password = strtok(NULL, ":");
         char *balance = strtok(NULL, ":");
-        accounts = push(accounts, nickname, password, atoi(balance), account_number);
+        accounts = push(accounts, nickname, password, atoll(balance), account_number);
     }
     fclose(file);
     return accounts;
@@ -248,7 +243,7 @@ void update_db(struct account *accounts, int *account_number){
     }
     int i;
     for(i = 0; i < *account_number; i++){
-        fprintf(file, "%s:%s:%d\n", accounts[i].nickname, accounts[i].password, accounts[i].balance);
+        fprintf(file, "%s:%s:%ld\n", accounts[i].nickname, accounts[i].password, accounts[i].balance);
     }
     fclose(file);
 }   

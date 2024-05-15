@@ -11,7 +11,6 @@
 #include <semaphore.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <bits/sigaction.h>
 
 typedef sem_t semaphore;

@@ -16,25 +16,27 @@ int main(){
 
     if(connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        perror("connect");
+        // perror("connect");
+        printf("Failed to connect. Try again please\n");
         exit(EXIT_FAILURE);
     }
 
     printf("Connected to the server\n");
     printf("Do you have an account? (y/n): ");
-    char response[5];
+    char response[5] = {0};
     fgets(response, 5, stdin);
+
     if(response[0] == 'y'){
-        response[4] = '\0'; //remove newline character
         login_into_acc(sockfd);
+        printf("You are now logged in\n");
         if(handle_response(sockfd) == 200){
-            printf("You are now logged in\n");
             printf("What do you want to do?\n");
             printf("1. Deposit money\n");
             printf("2. Withdraw money\n");
             printf("3. Check balance\n");
             printf("4. Exit\n");
             do{
+                printf("Enter your choice: ");
                 fgets(response, 5, stdin);
                 if(response[0] == '1'){
                     deposit_money(sockfd);
@@ -52,9 +54,19 @@ int main(){
                     fetch_balance(sockfd);
                 }
                 else if(response[0] == '4'){
-                    close_connection(sockfd);
+                    send_request(sockfd, "exit");
+                    if(handle_response(sockfd) == 200){
+                        close_connection(sockfd);
+                        printf("Connection closed\n");
+                        exit(EXIT_SUCCESS);
+                    }
                 }
-            }while(strlen(response) > 1);
+                else{
+                    printf("Invalid input\n");
+                }
+                printf("Do you want to continue:\n");
+            }while(1);
+
         }
         else if(handle_response(sockfd) == 404){
             printf("Account not found\n");
@@ -62,13 +74,14 @@ int main(){
         else{
             printf("Error\n");
         }
-        
     }
     else{
         create_acc(sockfd);
-        handle_response(sockfd);
         if(handle_response(sockfd) == 201){
-            printf("Account created\n");
+            printf("Account created succesfully\n");
+            printf("Please connect again to login\n");
+            close_connection(sockfd);
+            exit(EXIT_SUCCESS);
         }
     }
 
@@ -84,11 +97,11 @@ int send_request(int sock, char *request){
 int handle_response(int sock){
     char buffer[1024] = {0};
     read(sock, buffer, 1024);
-
+    // printf("Response: %s\n", buffer);
     char code[4];
     char response[1024];
     sscanf(buffer, "%s %s", code, response);
-
+    // printf("Code: %s\n", code);
     return atoi(code);
 }
 
@@ -149,10 +162,9 @@ void deposit_money(int sock){
     char amount_to_deposit[20];
     printf("Enter the amount you want to deposit: ");
     fgets(amount_to_deposit, 20, stdin);
-    printf("You entered: %s\n", amount_to_deposit);
+    amount_to_deposit[strlen(amount_to_deposit)-1] = '\0';
     strcpy(request, request_temp);
     strcat(request, amount_to_deposit);
-    request[strlen(request)-1] = '\0';
     send_request(sock, request);
 }
 

@@ -66,23 +66,31 @@ int main(){
         }
 
         //handle client request in a seperate process
+        int request = 0;
         pid_t pid;
         pid = fork();
         if(pid >= 0){    
             if(pid == 0){
-                close(sockfd); // close original socket because accept creates a new one
-                printf("IM KID\n PID: %d \n", getpid());
+                close(sockfd);
                 while(1){
-                    //TODO handle request properly so they dont loop forever
-                    int request = 0;
+                    request = handle_request(new_connection_socket, server_bank);
                     if(request == 0){
-                        request = handle_request(new_connection_socket, server_bank);
+                        ;
                     }
                     else if(request < 0){
+                        send_response(new_connection_socket, "200 OK");
                         close(new_connection_socket);
-                        exit(0);
+                        sem_close(server_bank->sem_bank);
+                        sem_close(server_bank->sem_server);
+                        sem_destroy(server_bank->sem_bank);
+                        sem_destroy(server_bank->sem_server);
+                        shmdt(server_bank->shared_mem);
+                        free(server_bank);
+                        printf("Connection closed\n");
+                        exit(EXIT_SUCCESS);
                     }
                     else{
+                        send_response(new_connection_socket, "400 BAD REQUEST");
                         continue;
                     }
                 }
@@ -120,12 +128,12 @@ int handle_request(int socket, struct server_bank *server_bank){
         handle_put_request(socket, path, server_bank);
         return 0;
     }
-    else if(strstr(path, "exit") != NULL){
-        return 1;
+    else if(strstr(method, "exit") != NULL){
+        return -1;
     }
     else{
         printf("Invalid request\n");
-        return 0;
+        return 1;
     }
     return 0;
 }
@@ -135,7 +143,6 @@ void handle_get_request(int socket, char buffer[], struct server_bank *server_ba
     char *login = "login";
     char *withdraw = "withdraw";
     char *balance = "balance";
-    char *exit = "exit";
 
     if(strstr(buffer, login) != NULL){
         handle_login(socket, buffer, server_bank);
@@ -175,13 +182,28 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
 
+    token = strtok(NULL, "/");
+    token = strtok(NULL, "/");
+    strcpy(password, token);
+
     while(1){
         if(data_ready == 1){
             read_from_bank(server_bank);
+            char *token = strtok(server_bank->buffer, "/");
+            token = strtok(NULL, "/");
+            char password_temp[20];
+            strcpy(password_temp, token);
+            printf("PASSWORD TEMP: %s\n", password_temp);
             data_ready = 0;
             if(strstr(server_bank->buffer, "200")){
-                char *response = "200 OK";
-                send_response(socket, response);
+                if(strcmp(nickname, password_temp) == 0){
+                    char *response = "200 OK";
+                    send_response(socket, response);
+                }
+                else{
+                    char *response = "401 UNAUTHORIZED";
+                    send_response(socket, response);
+                }
             }
             else{
                 char *response = "404 NOT FOUND";
@@ -239,7 +261,7 @@ void deposit_money(int socket, char buffer[], struct server_bank *server_bank){
             read_from_bank(server_bank);
             data_ready = 0;
             if(strstr(server_bank->buffer, "202")){
-                char *response = "200 OK";
+                char *response = "202 ACCEPTED";
                 send_response(socket, response);
             }
             else{
