@@ -39,6 +39,8 @@
 2. PUT /
     * PUT /deposit
     * PUT /create
+3. EXIT
+    * EXIT /exit
 
 # Actions
 
@@ -54,3 +56,10 @@
 * Cluttered code as of now *(05-14)*
 * Trying to implement the ideas I had and seeing that they do not work
 * Trying to understand how things work
+* Session handling
+
+# Features that should be added
+- [ ] Full input validation
+- [ ] Improved "UI"
+- [ ] A smarter way of handling multiple sessions
+- [ ] Clean up the code into multiple files. For now it's a huge mess
