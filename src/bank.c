@@ -5,15 +5,17 @@ sig_atomic_t exit_flag = 0;
 sig_atomic_t server_pid = 0;
 
 int main(){
+
     int account_amount = 0;
     int current_account = 0;
+    int session_amount = 0;
+
     struct account *accounts = read_accounts(&account_amount);
     struct bank_server *bank_server = malloc(sizeof(struct bank_server));
+    struct session *session = malloc(sizeof(struct session));
 
     sem_unlink(SEMKEYBANK);
     sem_unlink(SEMKEYSERVER);
-    int shmid = shared_mem_id(SHMKEY);
-    bank_server->shared_mem = shared_mem_ptr(shmid);
     bank_server->sem_bank = semaphore_open(SEMKEYBANK, 0);
     bank_server->sem_server = semaphore_open(SEMKEYSERVER, 1);
     bank_server->server_pid = 0;
@@ -44,7 +46,7 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
-
+    int shmid;
     pid_t server_proc = fork();
     if(server_proc < 0){
         perror("fork");
@@ -59,16 +61,33 @@ int main(){
                 continue;
             } 
             else {
+                if(session_amount == 0){
+                    shmid = shared_mem_id(server_pid);
+                    bank_server->shared_mem = shared_mem_ptr(shmid);
+                    printf("Connection: %d Ptr:%p \n", server_pid, bank_server->shared_mem);
+                }
+                else{
+                    //get session info
+                    for(int i = 0; i < session_amount; i++){
+                        if(session[i].connection_id == server_pid){
+                            current_account = session[i].current_account;
+                            break;
+                        }
+                    }
+                    shmid = shared_mem_id(server_pid);
+                    bank_server->shared_mem = shared_mem_ptr(shmid);
+                    printf("Connection: %d Ptr:%p \n", server_pid, bank_server->shared_mem);
+                }
                 data_ready = 0;
                 read_from_server(bank_server);
                 char path[500] = {0};
                 sscanf(bank_server->buffer, "%s", path);
-                printf("PATH: %s\n", path);
                 
                 if(strstr(path, "/login/")){
                     printf("LOGIN\n");
                     int status = login(accounts, path, account_amount);
                     current_account = status;
+                    push_session(session, current_account, server_pid, &session_amount);
                     if(status != 404){
                         char response[1024] = "200 OK/";
                         strcat(response, accounts[status].password);
@@ -108,9 +127,37 @@ int main(){
                 }
                 else if(strstr(path, "/withdraw/")){
                     printf("WITHDRAW\n");
+                    int status = withdraw_money(accounts, path, current_account);
+                    update_db(accounts, &account_amount);
+                    if(status == 202){
+                        strcpy(bank_server->buffer, "202 ACCEPTED");
+                        send_to_server(bank_server);
+                    }
+                    else{
+                        strcpy(bank_server->buffer, "400 BAD REQUEST");
+                        send_to_server(bank_server);
+                    }
                 }
                 else if(strstr(path, "/balance/")){
                     printf("BALANCE\n");
+                    int status = fetch_balance(accounts, path, current_account);
+                    if(status == 200){
+                        char response[1024] = "200 OK/";
+                        char balance[20];
+                        snprintf(balance, sizeof(balance), "%ld", accounts[current_account].balance);
+                        strcat(response, balance);
+                        strcpy(bank_server->buffer, response);
+                        send_to_server(bank_server);
+                    }
+                    else{
+                        strcpy(bank_server->buffer, "404 NOT FOUND");
+                        send_to_server(bank_server);
+                    }
+                }
+                else if(strstr(path, "/exit/")){
+                    printf("EXIT\n");
+                    shmctl(shmid, IPC_RMID, NULL);
+                    shmdt(bank_server->shared_mem);
                 }
             }
         }
@@ -119,8 +166,6 @@ int main(){
         sem_close(bank_server->sem_server);
         sem_destroy(bank_server->sem_bank);
         sem_destroy(bank_server->sem_server);
-        shmctl(shmid, IPC_RMID, NULL);
-        shmdt(bank_server->shared_mem);
         free(bank_server);
         free(accounts);
         exit(EXIT_SUCCESS);
@@ -129,19 +174,26 @@ int main(){
     return 0;
 }
 
-void send_to_server(struct bank_server *bank_server){
-    sem_wait(bank_server->sem_bank);
-    strcpy(bank_server->shared_mem, bank_server->buffer);
-    printf("SENDING TO SERVER: %s\n", bank_server->shared_mem);
-    sem_post(bank_server->sem_server);
-    sem_post(bank_server->sem_server);
-    sigusr1_send(server_pid);
+
+int fetch_balance(struct account *accounts, char buffer[], int current_account){
+    if(current_account >= 0){
+        return 200;
+    }
+    else{
+        return 404;
+    }
 }
 
-void read_from_server(struct bank_server *bank_server){
-    sem_wait(bank_server->sem_bank);
-    strcpy(bank_server->buffer, bank_server->shared_mem);
-    printf("READING FROM SERVER: %s\n", bank_server->buffer);
+int withdraw_money(struct account *accounts, char buffer[], int current_account){
+    char amount[20];
+    char *token = strtok(buffer, "/");
+    token = strtok(NULL, "/");
+    int64_t amount_to_withdraw = atoll(token);
+    if(accounts[current_account].balance < amount_to_withdraw){
+        return 400;
+    }
+    accounts[current_account].balance -= amount_to_withdraw;
+    return 202;
 }
 
 int deposit_money(struct account *accounts, char buffer[], int current_account){
@@ -161,7 +213,7 @@ int create_acc(struct account *accounts, char buffer[], int *accounts_amount){
     strcpy(nickname, token);
     token = strtok(NULL, "/");
     strcpy(password, token);
-    accounts = push(accounts, nickname, password, 0, accounts_amount);
+    accounts = push_account(accounts, nickname, password, 0, accounts_amount);
     update_db(accounts, accounts_amount);
     return 201;
 }
@@ -186,9 +238,7 @@ int login(struct account *accounts, char path[], int accounts_amount){
 int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_amount){
     int i;
     for (i = 0; i < accounts_amount; i++){
-        printf("BANK: %s\n", accounts[i].nickname);
         if(strcmp(accounts[i].nickname, nickname) == 0){
-            printf("FOUND\n");
             return i;
         }
     }
@@ -210,13 +260,25 @@ struct account *read_accounts(int *account_number){
         char *nickname = strtok(line, ":");
         char *password = strtok(NULL, ":");
         char *balance = strtok(NULL, ":");
-        accounts = push(accounts, nickname, password, atoll(balance), account_number);
+        accounts = push_account(accounts, nickname, password, atoll(balance), account_number);
     }
     fclose(file);
     return accounts;
 }
 
-struct account *push(struct account *accounts, char nickname[], char password[], int balance, int *account_number){
+struct session *push_session(struct session *sessions, int current_account, pid_t connection_id, int *session_amount){
+    sessions = realloc(sessions, ((*session_amount) + 1) * sizeof(struct session));
+    if(sessions == NULL){
+        perror("Memory allocation");
+        exit(EXIT_FAILURE);
+    }
+    sessions[(*session_amount)].current_account = current_account;
+    sessions[(*session_amount)].connection_id = connection_id;
+    (*session_amount)++;
+    return sessions;
+}
+
+struct account *push_account(struct account *accounts, char nickname[], char password[], int balance, int *account_number){
     accounts = realloc(accounts, ((*account_number) + 1) * sizeof(struct account));
     if(accounts == NULL){
         perror("Memory allocation");
@@ -242,6 +304,21 @@ void update_db(struct account *accounts, int *account_number){
     }
     fclose(file);
 }   
+
+void send_to_server(struct bank_server *bank_server){
+    sem_wait(bank_server->sem_bank);
+    strcpy(bank_server->shared_mem, bank_server->buffer);
+    printf("SENDING TO SERVER: %s\n", bank_server->shared_mem);
+    sem_post(bank_server->sem_server);
+    sem_post(bank_server->sem_server);
+    sigusr1_send(server_pid);
+}
+
+void read_from_server(struct bank_server *bank_server){
+    sem_wait(bank_server->sem_bank);
+    strcpy(bank_server->buffer, bank_server->shared_mem);
+    printf("READING FROM SERVER: %s\n", bank_server->buffer);
+}
 
 semaphore *semaphore_open(char *name, int init_val){
     semaphore *sem = sem_open(name, O_CREAT, 0644, init_val);
@@ -271,7 +348,6 @@ char *shared_mem_ptr(int shmid){
 }
 
 void sigusr1_send(int pid){
-    printf("BANK: %d\n", pid);
     kill(pid, SIGUSR1);
 }
 

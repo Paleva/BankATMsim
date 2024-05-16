@@ -45,8 +45,6 @@ int main(){
     }
 
     struct server_bank *server_bank = malloc(sizeof(struct server_bank));
-    int shmid = shared_mem_id(SHMKEY);
-    server_bank->shared_mem = shared_mem_ptr(shmid);
     server_bank->sem_bank = semaphore_open(SEMKEYBANK);
     server_bank->sem_server = semaphore_open(SEMKEYSERVER);
     server_bank->bank_pid = getppid();
@@ -67,7 +65,8 @@ int main(){
         pid = fork();
         if(pid >= 0){    
             if(pid == 0){
-                printf("SERVER: %d\n", getpid());
+                int shmid = shared_mem_id(getpid());
+                server_bank->shared_mem = shared_mem_ptr(shmid);
                 close(sockfd);
                 int request = 0;
                 while(1){
@@ -252,8 +251,7 @@ void handle_create_acc(int socket, char buffer[], struct server_bank *server_ban
 }
 
 void deposit_money(int socket, char buffer[], struct server_bank *server_bank){
-    char balance[20];
-    // char *token= strtok(buffer, " ");
+
     printf("Depositing money: %s\n", buffer);
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
@@ -279,11 +277,54 @@ void deposit_money(int socket, char buffer[], struct server_bank *server_bank){
 }
 
 void fetch_balance(int socket, char buffer[], struct server_bank *server_bank){
+    char balance[20];
+    
+    strcpy(server_bank->buffer, buffer);
+    send_to_bank(server_bank);
 
+    while(1){
+        if(data_ready == 1){
+            read_from_bank(server_bank);
+            data_ready = 0;
+            if(strstr(server_bank->buffer, "200")){
+                send_response(socket, server_bank->buffer);
+            }
+            else{
+                char *response = "400 BAD REQUEST";
+                send_response(socket, response);
+            }
+            break;
+        }
+        else{
+            continue;
+        }
+    }
 }
 
 void withdraw_money(int socket, char buffer[], struct server_bank *server_bank){
+    char amount[20];
 
+    strcpy(server_bank->buffer, buffer);
+    send_to_bank(server_bank);
+
+    while(1){
+        if(data_ready == 1){
+            read_from_bank(server_bank);
+            data_ready = 0;
+            if(strstr(server_bank->buffer, "202")){
+                char *response = "202 ACCEPTED";
+                send_response(socket, response);
+            }
+            else{
+                char *response = "400 BAD REQUEST";
+                send_response(socket, response);
+            }
+            break;
+        }
+        else{
+            continue;
+        }
+    }
 }
 
 void send_to_bank(struct server_bank *server_bank){
@@ -301,18 +342,16 @@ void read_from_bank(struct server_bank *server_bank){
     printf("READING FROM BANK: %s\n", server_bank->buffer);
 }
 
+void sigsusr1_send(int pid){
+    kill(pid, SIGUSR1);
+}
+
 void send_response(int sock, char *request){
     send(sock, request, strlen(request), 0);
 }
 
 void sigusr1_handler(int signo){
     data_ready = 1;
-
-}
-
-
-void sigsusr1_send(int pid){
-    kill(pid, SIGUSR1);
 }
 
 void sigchld_handler(int signo){

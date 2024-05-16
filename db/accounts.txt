@@ -1,5 +1,5 @@
-Voitke:1234:5829
-Voitkevicius:123456:209
+Voitke:1234:5788
+Voitkevicius:123456:419
 Arnas:123456789:500
 on:on:0
 on:nnno:0
@@ -8,3 +8,5 @@ ok:ko:0
 on:nnnn:0
 ble:5:0
 Vovovo:9876:0
+kevicius:123456:0
+Voi:12:0

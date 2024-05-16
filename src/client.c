@@ -30,7 +30,7 @@ int main(){
         int status = 0;
         if(response[0] == 'y'){
             login_into_acc(sockfd);
-            status = handle_response(sockfd);
+            status = handle_response(sockfd, NULL);
             if(status == 200){
                 printf("You are now logged in\n");
                 printf("What do you want to do?\n");
@@ -43,6 +43,8 @@ int main(){
                     fgets(response, 5, stdin);
                     if(response[0] == '1'){
                         deposit_money(sockfd);
+                        char buff[1024];
+                        status = handle_response(sockfd, buff);
                         if(status == 202){
                             printf("Money deposited\n");
                         }
@@ -52,15 +54,34 @@ int main(){
                     }
                     else if(response[0] == '2'){
                         withdraw_money(sockfd);
+                        char buff[1024];
+                        status = handle_response(sockfd, buff);
+                        if(status == 202){
+                            printf("Money withdrawn\n");
+                        }
+                        else{
+                            printf("Error while withdrawing. Can't withdraw more than you have\n");
+                        }
                     }
                     else if(response[0] == '3'){
                         fetch_balance(sockfd);
+                        char buff[1024];
+                        status = handle_response(sockfd, buff);
+                        char *token = strtok(buff, "/");
+                        token = strtok(NULL, "/");
+                        if(status == 200){
+                            printf("Your remaining balance: %s\n", token);
+                        }
+                        else{
+                            printf("Error while fetching balance\n");
+                        }
                     }
                     else if(response[0] == '4'){
                         send_request(sockfd, "EXIT /exit/");
+                        status = handle_response(sockfd, NULL);
                         if(status == 200){
-                            close_connection(sockfd);
                             printf("Connection closed\n");
+                            close(sockfd);
                             exit(EXIT_SUCCESS);
                         }
                     }
@@ -103,14 +124,18 @@ int send_request(int sock, char *request){
     return 0;
 }
 
-int handle_response(int sock){
+int handle_response(int sock, char buf[]){
     char buffer[1024] = {0};
     read(sock, buffer, 1024);
     printf("Response: %s\n", buffer);
     char code[4];
     char response[1024];
     sscanf(buffer, "%s %s", code, response);
-    // printf("Code: %s\n", code);
+
+    if(buf != NULL){
+        strcpy(buf, response);
+    }
+
     return atoi(code);
 }
 
@@ -135,7 +160,7 @@ void login_into_acc(int sock){
 
     request[strlen(request)-1] = '\0';
     
-    printf("You entered: %s\n", request);
+    // printf("You entered: %s\n", request);
     
     send_request(sock, request);
 }
@@ -160,9 +185,9 @@ void create_acc(int sock){
 
     request[strlen(request)-1] = '\0';
     
-    printf("You entered: %s\n", nickname);
+    // printf("You entered: %s\n", nickname);
+    
     send_request(sock, request);
-
 }
 
 void deposit_money(int sock){
@@ -179,13 +204,22 @@ void deposit_money(int sock){
 
 void withdraw_money(int sock){
     char *request_temp = "GET /withdraw/";
+    char request[1024];
+    char amount_to_withdraw[20];
+    printf("Enter the amount you want to withdraw: ");
+    fgets(amount_to_withdraw, 20, stdin);
+    amount_to_withdraw[strlen(amount_to_withdraw)-1] = '\0';
+    strcpy(request, request_temp);
+    strcat(request, amount_to_withdraw);
+    send_request(sock, request);
 }
 
 void fetch_balance(int sock){
     char *request_temp = "GET /balance/";
-
+    send_request(sock, request_temp);
 }
 
 void close_connection(int sock){
-    char *request_temp = "GET /exit/";
+    char *request_temp = "EXIT /exit/";
+    send_request(sock, request_temp);
 }

@@ -22,6 +22,6 @@ void close_connection(int sock);
 
 int send_request(int sock, char *request);
 
-int handle_response(int sock);
+int handle_response(int sock, char buf[]);
 
 #endif // CLIENT_H
