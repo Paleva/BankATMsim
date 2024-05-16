@@ -140,7 +140,7 @@ int main(){
                 }
                 else if(strstr(path, "/balance/")){
                     printf("BALANCE\n");
-                    int status = fetch_balance(accounts, path, current_account);
+                    int status = fetch_balance(current_account);
                     if(status == 200){
                         char response[1024] = "200 OK/";
                         char balance[20];
@@ -162,6 +162,7 @@ int main(){
             }
         }
         printf("Exiting\n");
+        kill(server_proc, SIGINT);
         sem_close(bank_server->sem_bank);
         sem_close(bank_server->sem_server);
         sem_destroy(bank_server->sem_bank);
@@ -175,7 +176,7 @@ int main(){
 }
 
 
-int fetch_balance(struct account *accounts, char buffer[], int current_account){
+int fetch_balance(int current_account){
     if(current_account >= 0){
         return 200;
     }
@@ -185,7 +186,6 @@ int fetch_balance(struct account *accounts, char buffer[], int current_account){
 }
 
 int withdraw_money(struct account *accounts, char buffer[], int current_account){
-    char amount[20];
     char *token = strtok(buffer, "/");
     token = strtok(NULL, "/");
     int64_t amount_to_withdraw = atoll(token);
@@ -197,7 +197,6 @@ int withdraw_money(struct account *accounts, char buffer[], int current_account)
 }
 
 int deposit_money(struct account *accounts, char buffer[], int current_account){
-    char amount[20];
     char *token = strtok(buffer, "/");
     token = strtok(NULL, "/");
     int64_t amount_to_deposit = atoll(token);

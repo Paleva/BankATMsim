@@ -127,7 +127,7 @@ int send_request(int sock, char *request){
 int handle_response(int sock, char buf[]){
     char buffer[1024] = {0};
     read(sock, buffer, 1024);
-    printf("Response: %s\n", buffer);
+    // printf("Response: %s\n", buffer);
     char code[4];
     char response[1024];
     sscanf(buffer, "%s %s", code, response);

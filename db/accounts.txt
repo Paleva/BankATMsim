@@ -1,6 +1,6 @@
-Voitke:1234:5788
-Voitkevicius:123456:419
-Arnas:123456789:500
+Voitke:1234:16900
+Voitkevicius:123456:18
+Arnas:123456789:200500
 on:on:0
 on:nnno:0
 oplia:n:0
@@ -10,3 +10,4 @@ ble:5:0
 Vovovo:9876:0
 kevicius:123456:0
 Voi:12:0
+kevicius:123456:0

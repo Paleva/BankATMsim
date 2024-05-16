@@ -43,7 +43,7 @@ struct bank_server{
 struct session *push_session(struct session *sessions, int current_account, pid_t connection_id, int *session_amount);
 
 // returns 200 if succesful
-int fetch_balance(struct account *accounts, char buffer[], int current_account);
+int fetch_balance(int current_account);
 
 // returns 202 if successfully withdrawn 
 // returns 400 if illegal withdraw 

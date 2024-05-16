@@ -55,5 +55,6 @@ void send_response(int sock, char *request);
 void sigsusr1_send(int pid);
 void sigchld_handler(int signum);
 void sigusr1_handler(int signum);
+void sigint_handler(int signum);
 
 #endif // SERVER_H 

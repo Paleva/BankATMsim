@@ -1,6 +1,7 @@
 #include "../include/server.h"
 
 sig_atomic_t data_ready = 0;
+sig_atomic_t exit_flag = 0;
 
 int main(){
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -44,6 +45,14 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
+    struct sigaction sa_int;
+    bzero(&sa_int, sizeof(sa_int));
+    sa_int.sa_handler = &sigint_handler;
+    if(sigaction(SIGINT, &sa_int, NULL) == -1){
+        perror("sigaction");
+        exit(EXIT_FAILURE);
+    }
+
     struct server_bank *server_bank = malloc(sizeof(struct server_bank));
     server_bank->sem_bank = semaphore_open(SEMKEYBANK);
     server_bank->sem_server = semaphore_open(SEMKEYSERVER);
@@ -73,13 +82,14 @@ int main(){
                     if(request == 0){
                         request = handle_request(new_connection_socket, server_bank);
                     }
-                    else if(request < 0){
+                    else if(request < 0 || exit_flag > 0){
                         send_response(new_connection_socket, "200 OK");
                         close(new_connection_socket);
                         sem_close(server_bank->sem_bank);
                         sem_close(server_bank->sem_server);
                         sem_destroy(server_bank->sem_bank);
                         sem_destroy(server_bank->sem_server);
+                        shmctl(shmid, IPC_RMID, NULL);
                         shmdt(server_bank->shared_mem);
                         free(server_bank);
                         printf("Connection closed\n");
@@ -223,9 +233,6 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
 }
 
 void handle_create_acc(int socket, char buffer[], struct server_bank *server_bank){
-    char nickname[20];
-    char password[20];
-    char *token= strtok(buffer, " ");
 
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
@@ -252,7 +259,6 @@ void handle_create_acc(int socket, char buffer[], struct server_bank *server_ban
 
 void deposit_money(int socket, char buffer[], struct server_bank *server_bank){
 
-    printf("Depositing money: %s\n", buffer);
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
 
@@ -277,7 +283,6 @@ void deposit_money(int socket, char buffer[], struct server_bank *server_bank){
 }
 
 void fetch_balance(int socket, char buffer[], struct server_bank *server_bank){
-    char balance[20];
     
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
@@ -302,8 +307,7 @@ void fetch_balance(int socket, char buffer[], struct server_bank *server_bank){
 }
 
 void withdraw_money(int socket, char buffer[], struct server_bank *server_bank){
-    char amount[20];
-
+    
     strcpy(server_bank->buffer, buffer);
     send_to_bank(server_bank);
 
@@ -356,6 +360,10 @@ void sigusr1_handler(int signo){
 
 void sigchld_handler(int signo){
     while(waitpid(-1, NULL, WNOHANG) > 0); // figure how this works
+}
+
+void sigint_handler(int signum){
+    exit_flag = signum;
 }
 
 
