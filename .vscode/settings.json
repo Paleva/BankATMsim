@@ -6,6 +6,7 @@
         "signal-defs.h": "c",
         "signal.h": "c",
         "sigaction.h": "c",
-        "wait.h": "c"
+        "wait.h": "c",
+        "client.h": "c"
     }
 }

@@ -39,8 +39,8 @@ struct bank_server{
     char buffer[1024];
 };
 
-//
-struct session *push_session(struct session *sessions, int current_account, pid_t connection_id, int *session_amount);
+// pushes a session to the array
+struct session *push_session(struct session *sessions, int current_account, pid_t connection_id, int session_amount);
 
 // returns 200 if succesful
 int fetch_balance(int current_account);
@@ -50,12 +50,12 @@ int fetch_balance(int current_account);
 int withdraw_money(struct account *accounts, char buffer[], int current_account);
 
 // returns 201 if account is created
-int create_acc(struct account *accounts, char buffer[], int *accounts_amount);
+struct account *create_acc(int *status, struct account *accounts, char buffer[], int *accounts_amount);
 
 // returns 202 if succesfully deposited
 int deposit_money(struct account *accounts, char buffer[], int current_account);
 
-// returns 200 if account is found
+// Return the index of the accounts in the array if it exist
 // returns 404 if account is not found
 int login(struct account *accounts, char path[], int accounts_amount);
 
@@ -70,7 +70,7 @@ struct account *read_accounts(int *account_number);
 struct account *push_account(struct account *accounts, char nickname[], char password[], int balance, int *account_number);
 
 // updates the file with the accounts
-void update_db(struct account *accounts, int *account_number);
+void update_db(struct account *accounts, int account_number);
 
 semaphore *semaphore_open(char* name, int init_val);
 

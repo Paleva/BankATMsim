@@ -59,7 +59,7 @@
 * Session handling
 
 # Features that should be added
-- [ ] Full input validation
+- [x] Full input validation
 - [ ] Improved "UI"
 - [ ] A smarter way of handling multiple sessions
 - [ ] Clean up the code into multiple files. For now it's a huge mess

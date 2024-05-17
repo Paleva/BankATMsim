@@ -61,6 +61,7 @@ int main(){
                 continue;
             } 
             else {
+                data_ready = 0;
                 if(session_amount == 0){
                     shmid = shared_mem_id(server_pid);
                     bank_server->shared_mem = shared_mem_ptr(shmid);
@@ -78,7 +79,6 @@ int main(){
                     bank_server->shared_mem = shared_mem_ptr(shmid);
                     printf("Connection: %d Ptr:%p \n", server_pid, bank_server->shared_mem);
                 }
-                data_ready = 0;
                 read_from_server(bank_server);
                 char path[500] = {0};
                 sscanf(bank_server->buffer, "%s", path);
@@ -87,7 +87,8 @@ int main(){
                     printf("LOGIN\n");
                     int status = login(accounts, path, account_amount);
                     current_account = status;
-                    push_session(session, current_account, server_pid, &session_amount);
+                    session = push_session(session, current_account, server_pid, session_amount);
+                    session_amount++;
                     if(status != 404){
                         char response[1024] = "200 OK/";
                         strcat(response, accounts[status].password);
@@ -101,8 +102,9 @@ int main(){
                 }
                 else if(strstr(path, "/create/")){
                     printf("CREATE\n");
-                    int status = create_acc(accounts, path, &account_amount);
-                    current_account = status;
+                    int status = 0;
+                    accounts = create_acc(&status, accounts, path, &account_amount);
+                    update_db(accounts, account_amount);
                     if(status == 201){
                         strcpy(bank_server->buffer, "201 CREATED");
                         send_to_server(bank_server);
@@ -115,7 +117,7 @@ int main(){
                 else if(strstr(path, "/deposit/")){
                     printf("DEPOSIT\n");
                     int status = deposit_money(accounts, path, current_account);
-                    update_db(accounts, &account_amount);
+                    update_db(accounts, account_amount);
                     if(status == 202){
                         strcpy(bank_server->buffer, "202 ACCEPTED");
                         send_to_server(bank_server);
@@ -128,7 +130,7 @@ int main(){
                 else if(strstr(path, "/withdraw/")){
                     printf("WITHDRAW\n");
                     int status = withdraw_money(accounts, path, current_account);
-                    update_db(accounts, &account_amount);
+                    update_db(accounts, account_amount);
                     if(status == 202){
                         strcpy(bank_server->buffer, "202 ACCEPTED");
                         send_to_server(bank_server);
@@ -169,12 +171,12 @@ int main(){
         sem_destroy(bank_server->sem_server);
         free(bank_server);
         free(accounts);
+        free(session);
         exit(EXIT_SUCCESS);
     }
 
     return 0;
 }
-
 
 int fetch_balance(int current_account){
     if(current_account >= 0){
@@ -204,7 +206,8 @@ int deposit_money(struct account *accounts, char buffer[], int current_account){
     return 202;
 }
 
-int create_acc(struct account *accounts, char buffer[], int *accounts_amount){
+struct account *create_acc(int *status,struct account *accounts, char buffer[], int *accounts_amount){
+    struct account *new_accounts = NULL;
     char nickname[20];
     char password[20];
     char *token = strtok(buffer, "/");
@@ -212,9 +215,9 @@ int create_acc(struct account *accounts, char buffer[], int *accounts_amount){
     strcpy(nickname, token);
     token = strtok(NULL, "/");
     strcpy(password, token);
-    accounts = push_account(accounts, nickname, password, 0, accounts_amount);
-    update_db(accounts, accounts_amount);
-    return 201;
+    new_accounts = push_account(accounts, nickname, password, 0, accounts_amount);
+    *status = 201;
+    return new_accounts;
 }
 
 int login(struct account *accounts, char path[], int accounts_amount){
@@ -265,15 +268,14 @@ struct account *read_accounts(int *account_number){
     return accounts;
 }
 
-struct session *push_session(struct session *sessions, int current_account, pid_t connection_id, int *session_amount){
-    sessions = realloc(sessions, ((*session_amount) + 1) * sizeof(struct session));
+struct session *push_session(struct session *sessions, int current_account, pid_t connection_id, int session_amount){
+    sessions = realloc(sessions, (session_amount + 1) * sizeof(struct session));
     if(sessions == NULL){
         perror("Memory allocation");
         exit(EXIT_FAILURE);
     }
-    sessions[(*session_amount)].current_account = current_account;
-    sessions[(*session_amount)].connection_id = connection_id;
-    (*session_amount)++;
+    sessions[session_amount].current_account = current_account;
+    sessions[session_amount].connection_id = connection_id;
     return sessions;
 }
 
@@ -290,7 +292,7 @@ struct account *push_account(struct account *accounts, char nickname[], char pas
     return accounts;
 }
 
-void update_db(struct account *accounts, int *account_number){
+void update_db(struct account *accounts, int account_number){
     FILE *file;
     file = fopen(ACCOUNTS, "w");
     if(file == NULL){
@@ -298,7 +300,7 @@ void update_db(struct account *accounts, int *account_number){
         exit(EXIT_FAILURE);
     }
     int i;
-    for(i = 0; i < *account_number; i++){
+    for(i = 0; i < account_number; i++){
         fprintf(file, "%s:%s:%ld\n", accounts[i].nickname, accounts[i].password, accounts[i].balance);
     }
     fclose(file);

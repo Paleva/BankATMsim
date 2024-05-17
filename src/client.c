@@ -106,7 +106,9 @@ int main(){
         }
         else{
             create_acc(sockfd);
+            status = handle_response(sockfd, NULL);
             if(status == 201){
+                
                 printf("Account created succesfully\n");
                 printf("Please connect again to login\n");
                 close_connection(sockfd);
@@ -146,13 +148,18 @@ void login_into_acc(int sock){
     char nickname[20];
     char password[20];
     
-    printf("Enter the nickname of the account you want to access: ");
-    fgets(nickname, 20, stdin);
+    do{
+        printf("Enter the nickname of the account you want to access: ");
+        fgets(nickname, 20, stdin);
+    }while(strlen(nickname) <= 1);
+
     nickname[strlen(nickname)-1] = '\0';
 
-    printf("Enter password: ");
-    fgets(password, 20, stdin); 
-
+    do{
+        printf("Enter password: ");
+        fgets(password, 20, stdin); 
+    }while(strlen(password) <= 1);
+    
     strcpy(request, request_temp);
     strcat(request, nickname);
     strcat(request, "/");
@@ -171,13 +178,18 @@ void create_acc(int sock){
     char nickname[20];
     char password[20];
 
-    printf("Enter the nickname of the account you want to create: ");
-    fgets(nickname, 20, stdin);
+    do{
+        printf("Enter the nickname of the account you want to create: ");
+        fgets(nickname, 20, stdin);
+    }while (strlen(nickname) <= 1);
+
     nickname[strlen(nickname)-1] = '\0';
 
-    printf("Enter password: ");
-    fgets(password, 20, stdin);
-
+    do{
+        printf("Enter password: ");
+        fgets(password, 20, stdin);
+    }while(strlen(password) <= 1);
+    
     strcpy(request, request_temp);
     strcat(request, nickname);
     strcat(request, "/");
@@ -194,9 +206,14 @@ void deposit_money(int sock){
     char *request_temp = "PUT /deposit/";
     char request[1024];
     char amount_to_deposit[20];
-    printf("Enter the amount you want to deposit: ");
-    fgets(amount_to_deposit, 20, stdin);
+
+    do{
+        printf("Enter the amount you want to deposit: ");
+        fgets(amount_to_deposit, 20, stdin);
+    }while(check_if_contains_letters(amount_to_deposit) || strlen(amount_to_deposit) <= 1);
+    
     amount_to_deposit[strlen(amount_to_deposit)-1] = '\0';
+
     strcpy(request, request_temp);
     strcat(request, amount_to_deposit);
     send_request(sock, request);
@@ -206,9 +223,14 @@ void withdraw_money(int sock){
     char *request_temp = "GET /withdraw/";
     char request[1024];
     char amount_to_withdraw[20];
-    printf("Enter the amount you want to withdraw: ");
-    fgets(amount_to_withdraw, 20, stdin);
+
+    do{
+        printf("Enter the amount you want to withdraw: ");
+        fgets(amount_to_withdraw, 20, stdin);
+    }while(check_if_contains_letters(amount_to_withdraw) || strlen(amount_to_withdraw) == 0);
+    
     amount_to_withdraw[strlen(amount_to_withdraw)-1] = '\0';
+    
     strcpy(request, request_temp);
     strcat(request, amount_to_withdraw);
     send_request(sock, request);
@@ -222,4 +244,13 @@ void fetch_balance(int sock){
 void close_connection(int sock){
     char *request_temp = "EXIT /exit/";
     send_request(sock, request_temp);
+}
+
+int check_if_contains_letters(char *str){
+    for(int i = 0; i < strlen(str); i++){
+        if(isalpha(str[i])){
+            return 1;
+        }
+    }
+    return 0;
 }
