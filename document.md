@@ -58,6 +58,12 @@
 * Trying to understand how things work
 * Session handling
 
+# Known bugs/problems
+* No bound checking
+* Buffer overflows are very much possible
+* Session tokens get created for every request. Meaning that there's a very big memory leak... (About 1KiB of leaked memory for every request lol)
+* EXIT "request" is not fully implemented. Only the connection gets closed between the server and client, but the session "token" is still present in the bank process
+
 # Features that should be added
 - [x] Full input validation
 - [ ] Improved "UI"
