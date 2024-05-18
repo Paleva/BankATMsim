@@ -94,7 +94,7 @@ int main(){
                         free(server_bank);
                         printf("Connection closed\n");
                         exit(EXIT_SUCCESS);
-                        exit(0);
+                        
                     }
                     else{
                         send_response(new_connection_socket, "400 BAD REQUEST");
@@ -115,6 +115,7 @@ int main(){
 
     return 0;
 }
+
 
 int handle_request(int socket, struct server_bank *server_bank){
     
@@ -182,7 +183,7 @@ void handle_put_request(int socket, char buffer[], struct server_bank *server_ba
 
 
 void handle_login(int socket, char buffer[], struct server_bank *server_bank){
-     char nickname[20] = {0};
+    char nickname[20] = {0};
     char password[20] = {0};
     char *token= strtok(buffer, " ");
     printf("BUFFER: %s\n", buffer);
@@ -201,14 +202,12 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
             int status;
             char *token_ = strtok(server_bank->buffer, " ");
             status = atoi(token_);
-            token_ = strtok(NULL, " ");
-            printf("STATUS: %d\n", status);
-            token_ = strtok(token_, "/");
-            token_ = strtok(NULL, "/");
-            char pass[20] = {0};
-            strcpy(pass, token_);
-            printf("PASS: %s\n", pass);
             if(status == 200){
+                token_ = strtok(NULL, " ");
+                token_ = strtok(token_, "/");
+                token_ = strtok(NULL, "/");
+                char pass[20] = {0};
+                strcpy(pass, token_);
                 if(strcmp(pass, password) == 0){
                     char *response = "200 OK";
                     send_response(socket, response);
@@ -219,7 +218,7 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
                 }
             }
             else{
-                char *response = "404 NOT FOUND";
+                char *response = "404 NOTFOUND";
                 send_response(socket, response);
             }
             break;
@@ -256,7 +255,6 @@ void handle_create_acc(int socket, char buffer[], struct server_bank *server_ban
         }
     }
 }
-
 void deposit_money(int socket, char buffer[], struct server_bank *server_bank){
 
     strcpy(server_bank->buffer, buffer);

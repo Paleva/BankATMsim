@@ -62,23 +62,18 @@ int main(){
             } 
             else {
                 data_ready = 0;
-                if(session_amount == 0){
-                    shmid = shared_mem_id(server_pid);
-                    bank_server->shared_mem = shared_mem_ptr(shmid);
-                    printf("Connection: %d Ptr:%p \n", server_pid, bank_server->shared_mem);
-                }
-                else{
-                    //get session info
-                    for(int i = 0; i < session_amount; i++){
-                        if(session[i].connection_id == server_pid){
-                            current_account = session[i].current_account;
-                            break;
-                        }
+
+                //get session info
+                for(int i = 0; i < session_amount; i++){
+                    if(session[i].connection_id == server_pid){
+                        current_account = session[i].current_account;
+                        break;
                     }
-                    shmid = shared_mem_id(server_pid);
-                    bank_server->shared_mem = shared_mem_ptr(shmid);
-                    printf("Connection: %d Ptr:%p \n", server_pid, bank_server->shared_mem);
                 }
+                shmid = shared_mem_id(server_pid);
+                bank_server->shared_mem = shared_mem_ptr(shmid);
+                printf("Connection: %d Ptr:%p \n", server_pid, bank_server->shared_mem);
+                
                 read_from_server(bank_server);
                 char path[500] = {0};
                 sscanf(bank_server->buffer, "%s", path);
@@ -96,7 +91,7 @@ int main(){
                         send_to_server(bank_server);
                     }
                     else{
-                        strcpy(bank_server->buffer, "404 NOT FOUND");
+                        strcpy(bank_server->buffer, "404 NOTFOUND");
                         send_to_server(bank_server);
                     }
                 }
@@ -158,6 +153,8 @@ int main(){
                 }
                 else if(strstr(path, "/exit/")){
                     printf("EXIT\n");
+                    printf("CLEANING UP: %p\n", bank_server->shared_mem);
+                    strcpy(bank_server->buffer, "200 OK");
                     shmctl(shmid, IPC_RMID, NULL);
                     shmdt(bank_server->shared_mem);
                 }

@@ -43,6 +43,7 @@ void send_to_bank(struct server_bank *server_bank);
 void deposit_money(int socket, char buffer[], struct server_bank *server_bank); 
 void fetch_balance(int socket, char buffer[], struct server_bank *server_bank);
 void withdraw_money(int socket, char buffer[], struct server_bank *server_bank);
+void exit_server(int socket, struct server_bank *server_bank);
 
 void handle_login(int socket, char buffer[], struct server_bank *server_bank);
 void handle_create_acc(int socket, char buffer[], struct server_bank *server_bank);

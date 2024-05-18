@@ -92,8 +92,9 @@ int main(){
             }
             else if(status == 404){
                 printf("Account not found\n");
-                printf("Do you want to create an account? (y/n): ");
-                fgets(response, 5, stdin);
+                printf("Please connect again and create an account:)\n");
+                close_connection(sockfd);
+                exit(EXIT_SUCCESS);
             }
             else if(status == 401){
                 printf("Invalid password\n");
@@ -108,7 +109,6 @@ int main(){
             create_acc(sockfd);
             status = handle_response(sockfd, NULL);
             if(status == 201){
-                
                 printf("Account created succesfully\n");
                 printf("Please connect again to login\n");
                 close_connection(sockfd);
@@ -227,7 +227,7 @@ void withdraw_money(int sock){
     do{
         printf("Enter the amount you want to withdraw: ");
         fgets(amount_to_withdraw, 20, stdin);
-    }while(check_if_contains_letters(amount_to_withdraw) || strlen(amount_to_withdraw) == 0);
+    }while(check_if_contains_letters(amount_to_withdraw) || strlen(amount_to_withdraw) <= 1 || atoll(amount_to_withdraw) < 0);
     
     amount_to_withdraw[strlen(amount_to_withdraw)-1] = '\0';
     
