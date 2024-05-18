@@ -23,7 +23,6 @@ typedef sem_t semaphore;
 struct session{
     int current_account;
     pid_t connection_id;
-    char *shared_mem_ptr;
 };
 
 struct account {
