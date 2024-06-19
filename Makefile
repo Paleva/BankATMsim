@@ -7,9 +7,9 @@ CC = gcc
 CFLAGS = -Wall -Wextra -g
 
 # Source files
-SRCS_BANK = src/bank.c
-SRCS_SERVER = src/server.c
-SRCS_CLIENT = src/client.c
+SRCS_BANK = src/bank/bank.c
+SRCS_SERVER = src/server/server.c
+SRCS_CLIENT = src/client/client.c
 
 # Object files
 OBJS_BANK = $(SRCS_BANK:.c=.o)

@@ -1,5 +1,8 @@
-Voitke:1234:16880
-Voitkevicius:123456:16785291
+Voitke:1234:16356
+Voitkevicius:123456:16285291
 Arnas:123456789:200500
-Wojak:4321:1200
+Wojak:4321:4688
 Soyjak:soy:1
+k:4321:0
+kuku:kuku:0
+kevicius:123456:0
