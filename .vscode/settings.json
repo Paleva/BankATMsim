@@ -9,6 +9,8 @@
         "wait.h": "c",
         "client.h": "c",
         "random": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "stdlib.h": "c",
+        "string.h": "c"
     }
 }

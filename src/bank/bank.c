@@ -21,30 +21,13 @@ int main(){
     bank_server->server_pid = 0;
 
     struct sigaction sa;
-    bzero(&sa, sizeof(sa));
-    sa.sa_sigaction = &sigusr1_handler;
-    sa.sa_flags = SA_RESTART | SA_SIGINFO;
-    if(sigaction(SIGUSR1, &sa, NULL) == -1){
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
+    init_signal(&sa, SIGUSR1, SA_RESTART | SA_SIGINFO, &sigusr1_handler);
 
     struct sigaction sa_chld;
-    bzero(&sa_chld, sizeof(sa_chld));
-    sa_chld.sa_handler = &sigchld_handler;
-    sa_chld.sa_flags = SA_RESTART;
-    if(sigaction(SIGCHLD, &sa_chld, NULL) == -1){
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
+    init_signal(&sa_chld, SIGCHLD, SA_RESTART, &sigchld_handler);
 
     struct sigaction sa_sigint;
-    bzero(&sa_sigint, sizeof(sa_sigint));
-    sa_sigint.sa_handler = &sigint_handler;
-    if(sigaction(SIGINT, &sa_sigint, NULL) == -1){
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
+    init_signal(&sa_sigint, SIGINT, SA_RESTART, &sigint_handler);
 
     int shmid;
     pid_t server_proc = fork();
@@ -241,74 +224,6 @@ int check_if_acc_exists(struct account *accounts, char nickname[], int accounts_
     return -1;
 }
 
-struct account *read_accounts(int *account_number){
-    FILE *file;
-    file = fopen(ACCOUNTS, "r");
-    if(file == NULL){
-        perror("Opening file");
-        exit(EXIT_FAILURE);
-    }
-
-    char line[1024];
-    struct account *accounts = NULL;
-    //read "database" into memory
-    while(fgets(line, 1024, file) != NULL){
-        char *nickname = strtok(line, ":");
-        char *password = strtok(NULL, ":");
-        char *balance = strtok(NULL, ":");
-        accounts = push_account(accounts, nickname, password, atoll(balance), account_number);
-    }
-    fclose(file);
-    return accounts;
-}
-
-struct session *get_session(struct session *sessions, int session_amount, pid_t connection_id){
-    for(int i = 0; i < session_amount; i++){
-        if(sessions[i].connection_id == connection_id){
-            return &sessions[i];
-        }
-    }
-    return NULL;
-}
-struct session *push_session(struct session *sessions, int current_account, pid_t connection_id, int session_amount, char *shared_mem){
-    sessions = realloc(sessions, (session_amount + 1) * sizeof(struct session));
-    if(sessions == NULL){
-        perror("Memory allocation");
-        exit(EXIT_FAILURE);
-    }
-    sessions[session_amount].current_account = current_account;
-    sessions[session_amount].connection_id = connection_id;
-    sessions[session_amount].shared_mem_ptr = shared_mem;
-    return sessions;
-}
-
-struct account *push_account(struct account *accounts, char nickname[], char password[], int balance, int *account_number){
-    accounts = realloc(accounts, ((*account_number) + 1) * sizeof(struct account));
-    if(accounts == NULL){
-        perror("Memory allocation");
-        exit(EXIT_FAILURE);
-    }
-    strcpy(accounts[*account_number].nickname, nickname);
-    strcpy(accounts[*account_number].password, password);
-    accounts[*account_number].balance = balance;
-    (*account_number)++;
-    return accounts;
-}
-
-void update_db(struct account *accounts, int account_number){
-    FILE *file;
-    file = fopen(ACCOUNTS, "w");
-    if(file == NULL){
-        perror("Opening file");
-        exit(EXIT_FAILURE);
-    }
-    int i;
-    for(i = 0; i < account_number; i++){
-        fprintf(file, "%s:%s:%ld\n", accounts[i].nickname, accounts[i].password, accounts[i].balance);
-    }
-    fclose(file);
-}   
-
 void send_to_server(struct bank_server *bank_server){
     sem_wait(bank_server->sem_bank);
     strcpy(bank_server->shared_mem, bank_server->buffer);
@@ -331,24 +246,6 @@ semaphore *semaphore_open(char *name, int init_val){
         exit(EXIT_FAILURE);
     }
     return sem;
-}
-
-int shared_mem_id(int key){
-    int shmid = shmget(key, 1024, 0666|IPC_CREAT);
-    if (shmid == -1){
-        perror("shmget");
-        exit(EXIT_FAILURE);
-    }
-    return shmid;
-}
-
-char *shared_mem_ptr(int shmid){    
-    char *str = (char*) shmat(shmid, NULL, 0);
-    if (str == (char*)-1){
-        perror("shmat");
-        exit(EXIT_FAILURE);
-    }
-    return str;
 }
 
 void sigusr1_send(int pid){

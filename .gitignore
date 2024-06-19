@@ -1,7 +1,6 @@
 *.o
-bank
-server
-client
+build
+debug
 ./db/accounts.txt
 a.out
 .vscode
