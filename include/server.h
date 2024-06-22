@@ -13,6 +13,8 @@
 #include <sys/wait.h>
 #include <semaphore.h>
 #include <signal.h>
+#include "shared_mem.h"
+#include "signals.h"
 
 typedef sem_t semaphore;
 
@@ -34,9 +36,6 @@ struct server_bank{
 
 semaphore *semaphore_open(char* name);
 
-int shared_mem_id(int key);
-char *shared_mem_ptr(int key);
-
 void read_from_bank(struct server_bank *server_bank);
 void send_to_bank(struct server_bank *server_bank);
 
@@ -46,7 +45,7 @@ void withdraw_money(int socket, char buffer[], struct server_bank *server_bank);
 
 void handle_login(int socket, char buffer[], struct server_bank *server_bank);
 void handle_create_acc(int socket, char buffer[], struct server_bank *server_bank);
-
+void handle_exit(int socket, char buffer[], struct server_bank *server_bank);
 int handle_request(int socket, struct server_bank *server_bank);
 void handle_get_request(int socket, char buffer[], struct server_bank *server_bank);
 void handle_put_request(int socket, char buffer[], struct server_bank *server_bank);

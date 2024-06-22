@@ -39,11 +39,13 @@ int main(){
         execl("./server", "./server", (char*)NULL);
     }
     else {
+        printf("dbr cia\n");
         while (exit_flag == 0) {
             if (data_ready == 0) {
                 continue;
             } 
             else {
+                printf("GAVOM DATA\n");
                 data_ready = 0;
                 struct session *current_session = get_session(sessions, session_amount, server_pid);
                 if(current_session == NULL){

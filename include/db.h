@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define ACCOUNTS "db/accounts.txt"
+#define ACCOUNTS "../db/accounts.txt"
 
 struct account {
     char nickname[20];

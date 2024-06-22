@@ -8,6 +8,7 @@
 struct session{
     int current_account;
     pid_t connection_id;
+    int shmid;
     char* shared_mem_ptr;
 };
 

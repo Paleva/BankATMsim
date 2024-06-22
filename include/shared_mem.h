@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <sys/shm.h>
+#include <stdio.h>
 
 int shared_mem_id(int key);
 char *shared_mem_ptr(int key);
