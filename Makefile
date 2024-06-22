@@ -2,7 +2,7 @@
 # Compiler
 CC = gcc
 # Compiler flags
-CFLAGS = -Wall -Wextra -O1
+CFLAGS = -Wall -Wextra
 CFLAGS_DEBUG = -Wall -Wextra -g
 # Source files
 SRCS_BANK = src/bank/bank.c src/bank/session.c src/lib/signals.c src/lib/shared_mem.c src/bank/db.c

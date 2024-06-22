@@ -26,32 +26,14 @@ int main(){
         perror("listen");
         exit(EXIT_FAILURE);
     }
+
     //handle zombie processes
     struct sigaction sa;
-    bzero(&sa, sizeof(sa));
-    sa.sa_handler = &sigchld_handler;
-    sa.sa_flags = SA_RESTART;
-    if(sigaction(SIGCHLD, &sa, NULL) == -1){
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
-    
     struct sigaction sa_usr1;
-    bzero(&sa_usr1, sizeof(sa_usr1));
-    sa_usr1.sa_handler = &sigusr1_handler;
-    sa_usr1.sa_flags = SA_RESTART;
-    if(sigaction(SIGUSR1, &sa_usr1, NULL) == -1){
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
-
     struct sigaction sa_int;
-    bzero(&sa_int, sizeof(sa_int));
-    sa_int.sa_handler = &sigint_handler;
-    if(sigaction(SIGINT, &sa_int, NULL) == -1){
-        perror("sigaction");
-        exit(EXIT_FAILURE);
-    }
+    init_signal(&sa, SIGCHLD, SA_RESTART, &sigchld_handler);
+    init_signal(&sa_usr1, SIGUSR1, SA_RESTART | SA_SIGINFO, &sigusr1_handler);
+    init_signal(&sa_int, SIGINT, SA_RESTART, &sigint_handler);
 
     struct server_bank *server_bank = malloc(sizeof(struct server_bank));
     server_bank->sem_bank = semaphore_open(SEMKEYBANK);
@@ -76,7 +58,6 @@ int main(){
             if(pid == 0){
                 int shmid = shared_mem_id(getpid());
                 server_bank->shared_mem = shared_mem_ptr(shmid);
-                close(sockfd);
                 int request = 0;
                 while(1){
                     if(request == 0){
@@ -84,6 +65,7 @@ int main(){
                     }
                     else if(request < 0 || exit_flag > 0){
                         send_response(new_connection_socket, "200 OK");
+                        close(sockfd);
                         close(new_connection_socket);
                         sem_close(server_bank->sem_bank);
                         sem_close(server_bank->sem_server);
@@ -182,7 +164,7 @@ void handle_put_request(int socket, char buffer[], struct server_bank *server_ba
 
 
 void handle_login(int socket, char buffer[], struct server_bank *server_bank){
-     char nickname[20] = {0};
+    char nickname[20] = {0};
     char password[20] = {0};
     char *token= strtok(buffer, " ");
     printf("BUFFER: %s\n", buffer);
@@ -196,8 +178,8 @@ void handle_login(int socket, char buffer[], struct server_bank *server_bank){
 
     while(1){
         if(data_ready == 1){
-            read_from_bank(server_bank);
             data_ready = 0;
+            read_from_bank(server_bank);
             int status;
             char *token_ = strtok(server_bank->buffer, " ");
             status = atoi(token_);
